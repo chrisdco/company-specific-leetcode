@@ -551,7 +551,7 @@ export default function ProblemTable({
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="t-small h-10 w-full rounded-lg sm:w-40" aria-label="Filter by difficulty">
+            <SelectTrigger className="w-full sm:w-40" aria-label="Filter by difficulty">
               <Filter className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
               <SelectValue placeholder="Difficulty" />
             </SelectTrigger>
@@ -679,14 +679,14 @@ export default function ProblemTable({
               )}
               {(problem.Topics ?? []).length > 0 && (
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {(problem.Topics ?? []).slice(0, 3).map((t) => (
+                  {(problem.Topics ?? []).slice(0, 5).map((t) => (
                     <Badge key={t} variant="secondary" className="t-caption font-medium">
                       {t}
                     </Badge>
                   ))}
-                  {(problem.Topics ?? []).length > 3 && (
+                  {(problem.Topics ?? []).length > 5 && (
                     <Badge variant="outline" title={(problem.Topics ?? []).join(", ")} className="t-caption font-medium">
-                      +{(problem.Topics ?? []).length - 3} more
+                      +{(problem.Topics ?? []).length - 5} more
                     </Badge>
                   )}
                 </div>
@@ -845,15 +845,15 @@ export default function ProblemTable({
                       {(problem.Topics ?? []).length === 0 ? (
                         <span className="t-caption text-stone-300 dark:text-zinc-600" aria-label="No topic data">—</span>
                       ) : (
-                        <div className="flex max-w-64 flex-wrap gap-1">
-                          {(problem.Topics ?? []).slice(0, 3).map((t) => (
+                        <div className="flex max-w-80 flex-wrap gap-1">
+                          {(problem.Topics ?? []).slice(0, 6).map((t) => (
                             <Badge key={t} variant="secondary" className="t-caption border-stone-200 bg-stone-100 px-1.5 py-0 font-medium text-stone-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                               {t}
                             </Badge>
                           ))}
-                          {(problem.Topics ?? []).length > 3 && (
+                          {(problem.Topics ?? []).length > 6 && (
                             <Badge variant="outline" title={(problem.Topics ?? []).join(", ")} className="t-caption px-1.5 py-0 font-medium text-stone-400 dark:text-zinc-500">
-                              +{(problem.Topics ?? []).length - 3}
+                              +{(problem.Topics ?? []).length - 6}
                             </Badge>
                           )}
                         </div>
@@ -917,7 +917,7 @@ export default function ProblemTable({
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="h-9 w-[72px] rounded-lg text-[13px]" aria-label="Rows per page">
+                <SelectTrigger size="sm" className="w-[72px]" aria-label="Rows per page">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
