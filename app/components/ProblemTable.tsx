@@ -454,7 +454,7 @@ export default function ProblemTable({
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h2 className="t-h2 text-stone-900 dark:text-zinc-100">Results</h2>
-          <p className="t-mono text-[12px] text-stone-400 dark:text-zinc-500">
+          <p className="tnum text-[12px] font-medium text-stone-400 dark:text-zinc-500">
             {filteredAndSorted.length !== problems.length
               ? `${filteredAndSorted.length} of ${problems.length}`
               : `${problems.length} problems`}
@@ -641,7 +641,7 @@ export default function ProblemTable({
               className={cn("border border-stone-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900", cardRadius, done && "opacity-70")}
             >
               <h3
-                className={cn("t-h3 line-clamp-3 text-stone-900 dark:text-zinc-100", done && "line-through decoration-stone-300 dark:decoration-zinc-600")}
+                className={cn("line-clamp-3 text-[14px] font-semibold leading-snug tracking-[-0.005em] text-stone-900 dark:text-zinc-100", done && "line-through decoration-stone-300 dark:decoration-zinc-600")}
               >
                 {problem.Title}
               </h3>
@@ -653,11 +653,11 @@ export default function ProblemTable({
                 >
                   {problem.Difficulty}
                 </Badge>
-                <span className="t-mono text-[12.5px] font-semibold text-stone-700 dark:text-zinc-200">
+                <span className="tnum text-[13px] font-semibold text-stone-700 dark:text-zinc-200">
                   {formatFrequency(problem.Frequency)}
                 </span>
                 <span className="t-caption text-stone-400 dark:text-zinc-500">{frequencyLabel(problem.Frequency)} ·</span>
-                <span className="t-mono text-[12.5px] font-semibold text-stone-700 dark:text-zinc-200">
+                <span className="tnum text-[13px] font-semibold text-stone-700 dark:text-zinc-200">
                   {formatAcceptance(problem["Acceptance Rate"])}
                 </span>
                 <span className="t-caption text-stone-400 dark:text-zinc-500">accepted</span>
@@ -820,7 +820,7 @@ export default function ProblemTable({
                       </Badge>
                     </TableCell>
                     <TableCell className="py-2.5 text-right">
-                      <span className="t-mono block text-[13.5px] font-semibold text-stone-900 dark:text-zinc-100">
+                      <span className="tnum block text-[13px] font-semibold text-stone-900 dark:text-zinc-100">
                         {formatFrequency(problem.Frequency)}
                       </span>
                       <span className="t-caption block text-stone-400 dark:text-zinc-500">
@@ -828,7 +828,7 @@ export default function ProblemTable({
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5 text-right">
-                      <span className="t-mono text-[13.5px] font-semibold text-stone-900 dark:text-zinc-100">
+                      <span className="tnum text-[13px] font-semibold text-stone-900 dark:text-zinc-100">
                         {formatAcceptance(problem["Acceptance Rate"])}
                       </span>
                     </TableCell>

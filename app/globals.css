@@ -179,7 +179,9 @@
     line-height: 1.5;
   }
   .t-display {
-    font-size: clamp(26px, 3.5vw, 32px);
+    /* Inter renders ~1px larger than most grotesques at the same size
+       (large x-height), so the scale is set a touch smaller to match. */
+    font-size: clamp(24px, 2.8vw, 30px);
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.15;

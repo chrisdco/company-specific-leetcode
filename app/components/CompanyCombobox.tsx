@@ -140,7 +140,7 @@ export default function CompanyCombobox({
               remove(selected[selected.length - 1]);
             }
           }}
-          className="h-10 rounded-lg pl-9 pr-9 text-[15px]"
+          className="h-10 rounded-lg pl-9 pr-9 text-sm"
         />
         <ChevronDown
           className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-zinc-500"

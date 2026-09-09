@@ -480,7 +480,7 @@ export default function Home() {
                   Time period
                 </label>
                 <Select value={time} onValueChange={setTime}>
-                  <SelectTrigger id="time-select" className="h-10 rounded-lg text-[15px]" aria-label="Time period">
+                  <SelectTrigger id="time-select" className="h-10 rounded-lg text-sm" aria-label="Time period">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
