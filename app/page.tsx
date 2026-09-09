@@ -104,6 +104,15 @@ function StatusDot({ tone, pulse = false }: { tone: "accent" | "amber" | "emeral
   );
 }
 
+function readUrlParams(): URLSearchParams | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return new URLSearchParams(window.location.search);
+  } catch {
+    return null;
+  }
+}
+
 function formatAsOf(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -112,10 +121,12 @@ function formatAsOf(iso: string | null | undefined): string | null {
 }
 
 export default function Home() {
-  // Lazy init from storage so the first paint already matches a returning
+  // Lazy init from URL/storage so the first paint already matches a returning
   // visitor (no light-flash for dark users). The wrapper below carries
   // suppressHydrationWarning because the prerendered HTML always uses defaults.
   const [theme, setTheme] = useState<ThemeName>(() => {
+    const th = readUrlParams()?.get("theme");
+    if (th && (VALID_THEMES as string[]).includes(th)) return th as ThemeName;
     if (typeof window === "undefined") return "clean";
     try {
       const saved = window.localStorage.getItem("csl-theme");
@@ -127,9 +138,15 @@ export default function Home() {
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [companiesError, setCompaniesError] = useState("");
   const [companyMeta, setCompanyMeta] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() => {
+    const sp = readUrlParams();
+    return sp ? sp.getAll("company").filter(Boolean).slice(0, MAX_COMPANIES) : [];
+  });
   const [recent, setRecent] = useState<string[]>(loadRecent);
-  const [time, setTime] = useState<string>("All");
+  const [time, setTime] = useState<string>(() => {
+    const tm = readUrlParams()?.get("time");
+    return tm && (TIME_OPTIONS as readonly string[]).includes(tm) ? tm : "All";
+  });
   const [problems, setProblems] = useState<Problem[]>([]);
   const [source, setSource] = useState<SourceKind>("primary");
   const [hasSearched, setHasSearched] = useState(false);
@@ -151,18 +168,8 @@ export default function Home() {
     } catch { /* ignore */ }
   }, [theme]);
 
-  // restore selection/time/theme from URL on first load (?company=A&company=B)
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const fromUrl = sp.getAll("company").filter(Boolean).slice(0, MAX_COMPANIES);
-      const tm = sp.get("time");
-      const th = sp.get("theme");
-      if (fromUrl.length > 0) setSelected(fromUrl);
-      if (tm && (TIME_OPTIONS as readonly string[]).includes(tm)) setTime(tm);
-      if (th && (VALID_THEMES as string[]).includes(th)) setTheme(th as ThemeName);
-    } catch { /* ignore */ }
-  }, []);
+  // NOTE: selection/time/theme initialize from the URL in the lazy useState
+  // initializers above — no mount effect needed.
 
   // sync URL (shareable links)
   useEffect(() => {
@@ -273,14 +280,23 @@ export default function Home() {
     }
   }, [selected, time]);
 
-  // auto-run once when arriving via shared link
+  // auto-run once when arriving via shared link. Deferred past commit so the
+  // fetch (and its state updates) don't cascade synchronously off this effect.
   useEffect(() => {
+    let cancelled = false;
     try {
       const sp = new URLSearchParams(window.location.search);
       if (sp.get("company") && sp.get("autoload") !== "0" && companies.length > 0 && !hasSearched && !loading) {
-        fetchProblems();
+        const t = setTimeout(() => {
+          if (!cancelled) void fetchProblems();
+        }, 0);
+        return () => {
+          cancelled = true;
+          clearTimeout(t);
+        };
       }
     } catch { /* ignore */ }
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companies.length]);
 

@@ -53,11 +53,11 @@ export default function CompanyCombobox({
     return pool;
   }, [companies, query]);
 
-  // Preserve keyboard position across keystrokes; only clamp when the
-  // list shrinks past it (resetting to 0 on every keypress felt broken).
-  useEffect(() => {
-    setHighlight((h) => (filtered.length === 0 || h < filtered.length ? h : 0));
-  }, [filtered]);
+  // Derive the clamped index during render instead of syncing it in an
+  // effect — resetting to 0 on every keypress felt broken, and clamping on
+  // read keeps a single source of truth without cascading renders.
+  const safeHighlight =
+    filtered.length === 0 ? 0 : Math.min(highlight, filtered.length - 1);
 
   function toggle(c: string) {
     if (selected.includes(c)) {
@@ -142,9 +142,9 @@ export default function CompanyCombobox({
               if (exact && (!open || filtered.includes(exact))) {
                 e.preventDefault();
                 toggle(exact);
-              } else if (open && filtered[highlight]) {
+              } else if (open && filtered[safeHighlight]) {
                 e.preventDefault();
-                toggle(filtered[highlight]);
+                toggle(filtered[safeHighlight]);
               }
             } else if (e.key === "Escape") {
               setOpen(false);
@@ -175,7 +175,7 @@ export default function CompanyCombobox({
             <ul id={listId} role="listbox" aria-multiselectable aria-label="Companies" className="p-1">
               {filtered.map((c, i) => {
                 const isSel = selected.includes(c);
-                const active = i === highlight;
+                const active = i === safeHighlight;
                 return (
                   <li key={c} role="option" aria-selected={isSel}>
                     <button

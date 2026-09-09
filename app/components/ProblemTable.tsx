@@ -171,7 +171,9 @@ export default function ProblemTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [jumpVal, setJumpVal] = useState("");
-  const [solved, setSolved] = useState<Set<string>>(new Set());
+  // loadSolved is SSR-safe (storage access is try/caught) and problems start
+  // empty, so hydrating from storage here can't mismatch the first paint.
+  const [solved, setSolved] = useState<Set<string>>(loadSolved);
   const [showUnsolvedOnly, setShowUnsolvedOnly] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -179,15 +181,15 @@ export default function ProblemTable({
   const isDark = theme === "dark";
   const cardRadius = isPanda ? "rounded-3xl" : "rounded-xl";
 
-  useEffect(() => {
-    setSolved(loadSolved());
-  }, []);
-
-  // Reset pagination whenever a new company/time result arrives
-  useEffect(() => {
+  // Reset pagination when a new result set arrives. Done as a render-time
+  // adjustment on prop identity (the documented alternative to syncing in
+  // an effect) — no cascade, no lint exception needed.
+  const [seenProblems, setSeenProblems] = useState(problems);
+  if (seenProblems !== problems) {
+    setSeenProblems(problems);
     setCurrentPage(1);
     setJumpVal("");
-  }, [problems]);
+  }
 
   // "/" focuses the result search (like GitHub/Linear) when not already typing
   useEffect(() => {

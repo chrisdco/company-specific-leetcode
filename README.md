@@ -69,9 +69,19 @@ Open [http://localhost:3000](http://localhost:3000).
 bun run test    # vitest: normalize + merge unit tests
 bun run lint
 bunx tsc --noEmit
-bun run build   # production build (webpack; Turbopack is dev-only for now)
+bun run build   # production build (Turbopack, default in Next 16)
 bun run start
 ```
+
+## Toolchain (tracked)
+
+| Package | Version | Notes |
+|---|---|---|
+| `next` | 16.3.4 | Migrated from 15.5.0; Turbopack default dev+build, async `params` already awaited |
+| `react` / `react-dom` | 19.2.8 | Bumped with Next 16 (React canary line) |
+| `eslint-config-next` | 16.3.4 | Native flat config — the old FlatCompat shim broke (`set-state-in-effect` now enforced; effects refactored, not silenced) |
+| `@types/react` / `@types/react-dom` | 19.2.x | Match React 19.2 |
+| Node floor | 20.9+ | Per Next 16 requirements (dev here: Node 22, Bun 1.4) |
 
 CI (`.github/workflows/ci.yml`) runs install, typecheck, lint, tests, and build on
 every push/PR to `main`. `bun.lock` is the single source of truth — no `package-lock.json`.

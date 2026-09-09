@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Note: Turbopack is used for `next dev` (fast HMR). Production `next build`
-  // stays on webpack for now — migrate to `next build --turbopack` only after
-  // the current feature batch lands cleanly with no build issues.
+  // Next 16: Turbopack is the default bundler for `next dev` and
+  // `next build`, so no flags or webpack config needed. If a future
+  // custom webpack setup is ever added, builds must explicitly opt out
+  // via `next build --webpack`.
 };
 
 export default nextConfig;

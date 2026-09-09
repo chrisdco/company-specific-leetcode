@@ -37,21 +37,25 @@ export default function TopicMultiSelect({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
+  // Focusing the panel search is a genuine external-DOM sync: this effect
+  // writes no state, so it stays within the rules.
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setHighlight(0);
-      // focus after paint so typing filters immediately
-      const t = setTimeout(() => searchRef.current?.focus(), 0);
-      // drop selections that no longer exist in a fresh result set
-      const valid = new Set(topics);
-      if (selected.some((s) => !valid.has(s))) {
-        onChange(selected.filter((s) => valid.has(s)));
-      }
-      return () => clearTimeout(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!open) return;
+    const t = setTimeout(() => searchRef.current?.focus(), 0);
+    return () => clearTimeout(t);
   }, [open ]);
+
+  function openPanel() {
+    // Reset + prune at open-time (event handler, not an effect): typing
+    // filters immediately and stale selections from a previous result set go.
+    setQuery("");
+    setHighlight(0);
+    const valid = new Set(topics);
+    if (selected.some((s) => !valid.has(s))) {
+      onChange(selected.filter((s) => valid.has(s)));
+    }
+    setOpen(true);
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,7 +88,7 @@ export default function TopicMultiSelect({
         <button
           ref={triggerRef}
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => (open ? close(false) : openPanel())}
           onKeyDown={(e) => {
             if (e.key === "Escape" && open) close(true);
           }}
