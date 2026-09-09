@@ -389,31 +389,23 @@ export default function Home() {
           }}
         >
           <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between">
+            {/* Identical skeleton in every theme — only copy/color swap, zero layout shift */}
             <div>
-              {isPanda ? (
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl p-2 shadow-md" style={{ backgroundColor: "#84a0a9" }} aria-hidden="true">
-                    <span className="text-lg leading-none">🐼</span>
-                  </div>
-                  <div>
-                    <p className="t-eyebrow" style={{ color: t.muted }}>
-                      Original tribute theme
-                    </p>
-                    <h1 className="t-display mt-0.5" style={{ color: "#0b0e0e" }}>
-                      Panda&apos;s Company Leetcode List
-                    </h1>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="t-eyebrow" style={{ color: "var(--accent)" }}>
-                    Company-targeted LeetCode prep
-                  </p>
-                  <h1 className="t-display mt-1 text-stone-900 dark:text-zinc-100">
-                    Company LeetCode Lists
-                  </h1>
-                </div>
-              )}
+              <p className="t-eyebrow" style={{ color: "var(--accent)" }}>
+                {isPanda ? "Original tribute theme" : "Company-targeted LeetCode prep"}
+              </p>
+              <h1
+                className="t-display mt-1 text-stone-900 dark:text-zinc-100"
+                style={isPanda ? { color: "#0b0e0e" } : undefined}
+              >
+                {isPanda ? (
+                  <>
+                    <span aria-hidden="true">🐼 </span>Panda&apos;s Company Leetcode List
+                  </>
+                ) : (
+                  "Company LeetCode Lists"
+                )}
+              </h1>
               <p className="t-body prose-measure mt-1.5 text-stone-600 dark:text-zinc-400" style={isPanda ? { color: t.muted, fontSize: 14 } : undefined}>
                 {isPanda
                   ? "Analyze trending coding problems from top tech companies."
@@ -433,7 +425,7 @@ export default function Home() {
             id="controls"
             aria-label="Search controls"
             className={cn("scroll-mt-4 border p-4 shadow-sm sm:p-5", isPanda ? "rounded-3xl" : "rounded-xl")}
-            style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, borderWidth: isPanda ? 2 : 1 }}
+            style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, borderWidth: 1 }}
           >
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[2fr_1fr_auto]">
               <div className="space-y-1.5">

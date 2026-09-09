@@ -20,8 +20,8 @@ export interface ThemeTokens {
 export const cleanTheme: ThemeTokens = {
   name: "clean",
   label: "Clean",
-  pageBg: "#f5f5f4", // warm paper — cards read white without cool-grey glare
-  headerBg: "#ffffff",
+  pageBg: "#e8e6e1", // deeper warm paper — white cards sit *in* it, less glare
+  headerBg: "#f1efe9",
   cardBg: "#ffffff",
   cardBorder: "#e7e5e4", // stone-200
   text: "#1c1917", // stone-900

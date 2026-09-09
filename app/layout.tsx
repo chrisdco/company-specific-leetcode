@@ -84,7 +84,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jbMono.variable} antialiased`}
         style={{
-          backgroundColor: '#f5f5f4', // warm paper; panda theme overrides per-page
+          backgroundColor: '#e8e6e1', // warm paper; panda/dark themes override per-page
           minHeight: '100dvh', // Dynamic viewport height for mobile
         }}
       >

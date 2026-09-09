@@ -35,6 +35,7 @@ import {
   ChevronsRight,
   CircleCheck,
   Circle,
+  Check,
   Info,
   ArrowUpDown,
   ArrowUpToLine,
@@ -525,8 +526,8 @@ export default function ProblemTable({
       <div
         className={cn("border border-stone-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:p-4", cardRadius)}
       >
-        <div className="flex flex-col gap-2.5 sm:flex-row">
-          <div className="relative flex-1">
+        <div className="flex flex-col flex-wrap gap-2.5 sm:flex-row">
+          <div className="relative min-w-0 flex-1 basis-56">
             <Search
               className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-zinc-500"
               aria-hidden
@@ -540,7 +541,7 @@ export default function ProblemTable({
                 setCurrentPage(1);
               }}
               aria-label="Search problems, topics, or companies"
-              className="t-small h-10 rounded-lg pl-9"
+              className="h-10 rounded-lg pl-9 text-base sm:text-sm"
             />
           </div>
           <Select
@@ -696,16 +697,24 @@ export default function ProblemTable({
                   onClick={() => toggleSolved(problem.Link)}
                   aria-pressed={done}
                   aria-label={done ? `Mark ${problem.Title} as unsolved` : `Mark ${problem.Title} as solved`}
-                  className="t-small flex items-center gap-1.5 rounded-lg px-2 py-1.5 font-semibold text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className={cn(
+                    "t-small flex items-center gap-1.5 rounded-full px-3 py-2 font-semibold transition-all",
+                    done
+                      ? ""
+                      : "text-stone-500 hover:bg-stone-100 hover:text-stone-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  )}
+                  style={done ? { backgroundColor: "var(--accentSoft)", color: "var(--accent)" } : undefined}
                 >
                   {done ? (
-                    <CircleCheck className="h-4 w-4 text-stone-800 dark:text-zinc-100" aria-hidden />
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full" style={{ backgroundColor: "var(--accent)" }} aria-hidden>
+                      <Check className="h-3 w-3 text-white dark:text-zinc-950" strokeWidth={3.5} aria-hidden />
+                    </span>
                   ) : (
                     <Circle className="h-4 w-4 text-stone-300 dark:text-zinc-600" aria-hidden />
                   )}
                   {done ? "Solved" : "Mark solved"}
                 </button>
-                <Button variant="outline" size="sm" asChild className="h-8 rounded-lg text-[13px] font-semibold" aria-label={`Open ${problem.Title} on LeetCode`}>
+                <Button variant="outline" size="sm" asChild className="h-9 rounded-lg px-3 text-[13px] font-semibold" aria-label={`Open ${problem.Title} on LeetCode`}>
                   <a href={problem.Link} target="_blank" rel="noopener noreferrer">
                     Open <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                   </a>
@@ -863,12 +872,18 @@ export default function ProblemTable({
                         onClick={() => toggleSolved(problem.Link)}
                         aria-pressed={done}
                         aria-label={done ? `Mark ${problem.Title} as unsolved` : `Mark ${problem.Title} as solved`}
-                        className="rounded-lg p-1.5 transition-colors hover:bg-stone-100 dark:hover:bg-zinc-800"
+                        title={done ? "Solved — click to undo" : "Mark solved"}
+                        className="flex h-[26px] w-[26px] items-center justify-center rounded-full transition-all hover:scale-110"
+                        style={
+                          done
+                            ? { backgroundColor: "var(--accent)", boxShadow: "0 1px 4px rgb(0 0 0 / 0.25)" }
+                            : undefined
+                        }
                       >
                         {done ? (
-                          <CircleCheck className="h-[18px] w-[18px]" style={{ color: "var(--accent)" }} aria-hidden />
+                          <Check className="h-4 w-4 text-white dark:text-zinc-950" strokeWidth={3} aria-hidden />
                         ) : (
-                          <Circle className="h-[18px] w-[18px] text-stone-300 dark:text-zinc-600" aria-hidden />
+                          <Circle className="h-[22px] w-[22px] text-stone-300 transition-colors hover:text-stone-500 dark:text-zinc-600 dark:hover:text-zinc-300" aria-hidden />
                         )}
                       </button>
                     </TableCell>
@@ -902,7 +917,7 @@ export default function ProblemTable({
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="h-8 w-[72px] rounded-lg text-[13px]" aria-label="Rows per page">
+                <SelectTrigger className="h-9 w-[72px] rounded-lg text-[13px]" aria-label="Rows per page">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -920,7 +935,7 @@ export default function ProblemTable({
                 size="sm"
                 onClick={() => setCurrentPage(1)}
                 disabled={safePage === 1}
-                className="h-8 w-8 rounded-lg p-0"
+                className="h-9 w-9 rounded-lg p-0"
                 aria-label="First page"
               >
                 <ChevronsLeft className="h-4 w-4" aria-hidden />
@@ -930,7 +945,7 @@ export default function ProblemTable({
                 size="sm"
                 onClick={() => setCurrentPage(safePage - 1)}
                 disabled={safePage === 1}
-                className="h-8 w-8 rounded-lg p-0"
+                className="h-9 w-9 rounded-lg p-0"
                 aria-label="Previous page"
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden />
@@ -947,7 +962,7 @@ export default function ProblemTable({
                     variant={pageNum === safePage ? "default" : "outline"}
                     size="sm"
                     onClick={() => setCurrentPage(pageNum)}
-                    className="tnum h-8 w-8 rounded-lg p-0 text-[13px] font-semibold"
+                    className="tnum h-9 w-9 rounded-lg p-0 text-[13px] font-semibold"
                     aria-label={`Page ${pageNum}`}
                     aria-current={pageNum === safePage ? "page" : undefined}
                   >
@@ -960,7 +975,7 @@ export default function ProblemTable({
                 size="sm"
                 onClick={() => setCurrentPage(safePage + 1)}
                 disabled={safePage === totalPages}
-                className="h-8 w-8 rounded-lg p-0"
+                className="h-9 w-9 rounded-lg p-0"
                 aria-label="Next page"
               >
                 <ChevronRight className="h-4 w-4" aria-hidden />
@@ -970,7 +985,7 @@ export default function ProblemTable({
                 size="sm"
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={safePage === totalPages}
-                className="h-8 w-8 rounded-lg p-0"
+                className="h-9 w-9 rounded-lg p-0"
                 aria-label="Last page"
               >
                 <ChevronsRight className="h-4 w-4" aria-hidden />
@@ -989,9 +1004,9 @@ export default function ProblemTable({
                   value={jumpVal}
                   onChange={(e) => setJumpVal(e.target.value.replace(/[^0-9]/g, ""))}
                   aria-label={`Jump to page, 1 to ${totalPages}`}
-                  className="tnum h-8 w-14 rounded-lg px-2 text-center text-[13px]"
+                  className="tnum h-9 w-14 rounded-lg px-2 text-center text-base sm:text-[13px]"
                 />
-                <Button type="submit" variant="outline" size="sm" className="h-8 rounded-lg px-2.5 text-[13px] font-semibold" aria-label="Go to page">
+                <Button type="submit" variant="outline" size="sm" className="h-9 rounded-lg px-2.5 text-[13px] font-semibold" aria-label="Go to page">
                   Go
                 </Button>
               </form>

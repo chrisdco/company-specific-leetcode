@@ -70,7 +70,7 @@ export default function TopicMultiSelect({
         aria-controls={listId}
         aria-label={`Filter by topic${selected.length > 0 ? `, ${selected.length} selected` : ""}`}
         className={cn(
-          "t-small flex h-10 w-full items-center gap-2 rounded-lg border bg-transparent px-3 font-medium shadow-xs transition-colors sm:w-44",
+          "flex h-10 w-full items-center gap-2 rounded-lg border bg-transparent px-3 text-sm font-medium shadow-xs transition-colors sm:w-44",
           "border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-zinc-800 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800/60",
           selected.length > 0 && "font-semibold"
         )}
@@ -124,7 +124,7 @@ export default function TopicMultiSelect({
               }}
               placeholder="Search topics…"
               aria-label="Search topics"
-              className="t-small h-9 rounded-lg pl-8"
+              className="h-9 rounded-lg pl-8 text-base sm:text-sm"
             />
           </div>
           <ul

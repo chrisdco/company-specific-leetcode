@@ -45,7 +45,7 @@ export default function StudyGuides() {
         Learn patterns first, then target companies
       </h2>
       <p className="t-small prose-measure mt-1.5 text-stone-600 dark:text-zinc-400">
-        Company lists work best as a <strong className="font-semibold text-slate-800">final 3–4 week filter</strong>,
+        Company lists work best as a <strong className="font-semibold text-stone-800 dark:text-zinc-200">final 3–4 week filter</strong>,
         not a starting point. Build pattern recognition with one list below, then come back and
         grind the top 20–30 high-frequency problems for your target company.
       </p>
