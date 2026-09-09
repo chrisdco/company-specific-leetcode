@@ -1,27 +1,35 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Inter: large x-height + open apertures hold up at 12–15px UI sizes better
+// than tighter grotesques; JetBrains Mono gives tabular, scannable figures.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jbMono = JetBrains_Mono({
+  variable: "--font-jbmono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Panda LeetCode",
-  description: "Find LeetCode problems frequently asked by top tech companies. Search and filter problems by company and time period to focus your interview preparation.",
-  keywords: ["leetcode", "interview", "coding", "tech companies", "programming", "algorithms", "data structures"],
-  authors: [{ name: "Panda LeetCode" }],
+  metadataBase: new URL("https://panda-leetcode.vercel.app"),
+  title: {
+    default: "Company LeetCode Lists — Targeted Interview Prep",
+    template: "%s · Company LeetCode Lists",
+  },
+  description: "Filter 700+ companies by recency and frequency. Learn patterns with Blind 75 / NeetCode 150 first, then target the top 30 company-tagged LeetCode problems.",
+  keywords: ["leetcode", "interview", "coding", "tech companies", "programming", "algorithms", "data structures", "blind 75", "neetcode 150", "grind 75"],
+  authors: [{ name: "Company LeetCode Lists" }],
   openGraph: {
-    title: "Panda LeetCode",
-    description: "Find LeetCode problems frequently asked by top tech companies. Search and filter problems by company and time period to focus your interview preparation.",
+    title: "Company LeetCode Lists",
+    description: "Filter 700+ companies by recency and frequency. Patterns first, then company targeting.",
     url: "https://panda-leetcode.vercel.app",
-    siteName: "Panda LeetCode",
+    siteName: "Company LeetCode Lists",
     images: [
       {
         url: "/panda.svg",
@@ -35,10 +43,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Panda LeetCode",
-    description: "Find LeetCode problems frequently asked by top tech companies. Search and filter problems by company and time period to focus your interview preparation.",
+    title: "Company LeetCode Lists",
+    description: "Filter 700+ companies by recency and frequency. Patterns first, then company targeting.",
     images: ["/panda.svg"],
-    creator: "@pandaleetcode",
   },
   robots: {
     index: true,
@@ -70,19 +77,19 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="theme-color" content="#d3cac2" />
-        <meta name="apple-mobile-web-app-title" content="Panda LeetCode" />
+        <meta name="theme-color" content="#f5f5f4" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+        <meta name="apple-mobile-web-app-title" content="Company LeetCode" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${jbMono.variable} antialiased`}
         style={{
-          backgroundColor: '#d3cac2', // Panda agreeable grey
+          backgroundColor: '#f5f5f4', // warm paper; panda theme overrides per-page
           minHeight: '100dvh', // Dynamic viewport height for mobile
         }}
       >
         <div 
           style={{
-            backgroundColor: '#d3cac2',
             minHeight: '100dvh',
             paddingTop: 'env(safe-area-inset-top)',
             paddingBottom: 'env(safe-area-inset-bottom)',

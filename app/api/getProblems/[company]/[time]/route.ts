@@ -1,58 +1,65 @@
 import { NextRequest } from "next/server";
-import { parse } from 'csv-parse/sync';
-import { getCompanyList } from "@/lib/getCompanyList";
-
-const ALLOWED_TIMES = [
-  "Thirty Days",
-  "Three Months",
-  "Six Months",
-  "More Than Six Months",
-  "All"
-];
-const TIME_TO_FILENAME: Record<string, string> = {
-  "Thirty Days": "1. Thirty Days.csv",
-  "Three Months": "2. Three Months.csv",
-  "Six Months": "3. Six Months.csv",
-  "More Than Six Months": "4. More Than Six Months.csv",
-  "All": "5. All.csv"
-};
+import {
+  TIME_OPTIONS,
+  getMergedCompanyList,
+  getProblemsWithFallback,
+  normalizeKey,
+} from "@/lib/sources";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ company: string; time: string }> }
 ) {
   const { company, time } = await params;
-  const allowedCompanies = await getCompanyList();
-  if (!allowedCompanies.includes(company)) {
-    return new Response('Invalid company', { status: 400 });
+
+  if (!company || typeof company !== "string" || company.length > 100) {
+    return Response.json({ error: "Invalid company" }, { status: 400 });
   }
-  if (!ALLOWED_TIMES.includes(time)) {
-    return new Response('Invalid time', { status: 400 });
+  if (!(TIME_OPTIONS as readonly string[]).includes(time)) {
+    return Response.json({ error: "Invalid time" }, { status: 400 });
   }
-  const timeCsv = TIME_TO_FILENAME[time];
-  const rawUrl = `https://raw.githubusercontent.com/liquidslr/leetcode-company-wise-problems/main/${encodeURIComponent(company)}/${encodeURIComponent(timeCsv)}`;
-  const response = await fetch(rawUrl);
-  if (!response.ok) {
-    return new Response('Failed to fetch data from upstream', { status: 502 });
-  }
-  const csv = await response.text();
-  let records;
+
+  // Allowlist against merged canonical list (fuzzy: exact or normalized match
+  // so URL-encoded variants and casing differences still validate safely).
   try {
-    records = parse(csv, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    }) as Record<string, string>[];
-  } catch {
-    return new Response('Failed to parse CSV', { status: 500 });
-  }
-  const result = records.map(r => ({
-    ...r,
-    Topics: (r["Topics"] || "").split(/;|,/).map(s => s.trim()).filter(Boolean)
-  }));
-  return new Response(JSON.stringify(result), {
-    headers: {
-      "Content-Type": "application/json; charset=utf-8"
+    const { companies } = await getMergedCompanyList();
+    let decoded = company;
+    try {
+      decoded = decodeURIComponent(company);
+    } catch {
+      decoded = company;
     }
-  });
+    const target = normalizeKey(decoded);
+    const canonical =
+      companies.find((c) => c === company) ??
+      companies.find((c) => normalizeKey(c) === target);
+    if (!canonical) {
+      return Response.json({ error: "Invalid company" }, { status: 400 });
+    }
+
+    const { problems, source, fallbackUsed } = await getProblemsWithFallback(
+      canonical,
+      time
+    );
+    return Response.json(
+      {
+        company: canonical,
+        time,
+        source, // "primary" (liquidslr) | "fallback" (snehasishroy)
+        fallbackUsed,
+        count: problems.length,
+        problems,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        },
+      }
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to fetch problems";
+    const status = /not found/i.test(message) ? 404 : 502;
+    return Response.json({ error: message, problems: [] }, { status });
+  }
 }

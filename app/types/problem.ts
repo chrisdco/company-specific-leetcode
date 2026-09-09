@@ -6,4 +6,6 @@ export interface Problem {
     "Acceptance Rate": string;
     Link: string;
     Topics: string[];
+    /** Populated client-side when multiple companies are merged. */
+    Companies?: string[];
 }

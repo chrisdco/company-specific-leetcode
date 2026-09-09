@@ -1,11 +1,11 @@
 {
-  "name": "Panda LeetCode",
-  "short_name": "Panda LC",
-  "description": "Find LeetCode problems frequently asked by top tech companies",
+  "name": "Company LeetCode Lists",
+  "short_name": "Co LeetCode",
+  "description": "Filter 700+ companies by recency and frequency for targeted LeetCode prep",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0F172A",
-  "theme_color": "#3B82F6",
+  "background_color": "#f6f7f9",
+  "theme_color": "#0f172a",
   "icons": [
     {
       "src": "/panda.svg",
