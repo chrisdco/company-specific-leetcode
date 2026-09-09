@@ -20,8 +20,11 @@ export default function TopicMultiSelect({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
 
   useEffect(() => {
@@ -37,6 +40,7 @@ export default function TopicMultiSelect({
   useEffect(() => {
     if (open) {
       setQuery("");
+      setHighlight(0);
       // focus after paint so typing filters immediately
       const t = setTimeout(() => searchRef.current?.focus(), 0);
       // drop selections that no longer exist in a fresh result set
@@ -55,6 +59,18 @@ export default function TopicMultiSelect({
     return topics.filter((t) => t.toLowerCase().includes(q));
   }, [topics, query]);
 
+  // Keep the highlighted option visible while arrowing.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector(`[data-idx="${highlight}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlight]);
+
+  function close(returnFocus: boolean) {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  }
+
   function toggle(t: string) {
     onChange(
       selected.includes(t) ? selected.filter((s) => s !== t) : [...selected, t]
@@ -63,47 +79,45 @@ export default function TopicMultiSelect({
 
   return (
     <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={listId}
-        aria-label={`Filter by topic${selected.length > 0 ? `, ${selected.length} selected` : ""}`}
-        className={cn(
-          "flex h-10 w-full items-center gap-2 rounded-lg border bg-transparent px-3 text-sm font-medium shadow-xs transition-colors sm:w-44",
-          "border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-zinc-800 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800/60",
-          selected.length > 0 && "font-semibold"
-        )}
-        style={selected.length > 0 ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
-      >
-        <Hash className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
-        <span className="flex-1 truncate text-left">
-          {selected.length === 0 ? "All topics" : selected.length === 1 ? selected[0] : `${selected.length} topics`}
-        </span>
-        {selected.length > 0 ? (
-          <span
-            role="button"
-            tabIndex={0}
+      {/* Trigger + clear are siblings (a button inside a button is invalid HTML). */}
+      <div className="relative">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && open) close(true);
+          }}
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-label={`Filter by topic${selected.length > 0 ? `, ${selected.length} selected` : ""}`}
+          className={cn(
+            "flex h-10 w-full items-center gap-2 rounded-lg border bg-transparent px-3 text-sm font-medium shadow-xs transition-colors sm:w-44",
+            "border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-zinc-800 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800/60",
+            selected.length > 0 && "font-semibold"
+          )}
+          style={selected.length > 0 ? { borderColor: "var(--accent)", color: "var(--accent)", paddingRight: "2.25rem" } : undefined}
+        >
+          <Hash className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
+          <span className="flex-1 truncate text-left">
+            {selected.length === 0 ? "All topics" : selected.length === 1 ? selected[0] : `${selected.length} topics`}
+          </span>
+          {selected.length === 0 && (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+          )}
+        </button>
+        {selected.length > 0 && (
+          <button
+            type="button"
             aria-label="Clear topic filter"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange([]);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onChange([]);
-              }
-            }}
-            className="rounded p-0.5 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+            onClick={() => onChange([])}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+            style={{ color: "var(--accent)" }}
           >
             <X className="h-3.5 w-3.5" aria-hidden />
-          </span>
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+          </button>
         )}
-      </button>
+      </div>
 
       {open && (
         <div
@@ -117,17 +131,34 @@ export default function TopicMultiSelect({
             <Input
               ref={searchRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+              }}
               onKeyDown={(e) => {
-                if (e.key === "Escape") setOpen(false);
-                if (e.key === "Enter" && filtered.length === 1) toggle(filtered[0]);
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setHighlight((h) => Math.max(h - 1, 0));
+                } else if (e.key === "Enter") {
+                  if (filtered[highlight]) {
+                    e.preventDefault();
+                    toggle(filtered[highlight]);
+                  }
+                } else if (e.key === "Escape") {
+                  close(true);
+                }
               }}
               placeholder="Search topics…"
               aria-label="Search topics"
+              aria-controls={listId}
+              aria-autocomplete="list"
               className="h-9 rounded-lg pl-8 text-base sm:text-sm"
             />
           </div>
           <ul
+            ref={listRef}
             id={listId}
             role="listbox"
             aria-multiselectable
@@ -139,18 +170,23 @@ export default function TopicMultiSelect({
                 No topics match “{query}”.
               </li>
             ) : (
-              filtered.map((t) => {
+              filtered.map((t, i) => {
                 const isSel = selected.includes(t);
+                const hot = i === highlight;
                 return (
                   <li key={t} role="option" aria-selected={isSel}>
                     <button
                       type="button"
+                      data-idx={i}
+                      onMouseEnter={() => setHighlight(i)}
                       onClick={() => toggle(t)}
                       className={cn(
-                        "t-small flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left transition-colors",
+                        "t-small flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left transition-colors [@media(pointer:coarse)]:min-h-11",
                         isSel
                           ? "font-semibold"
-                          : "text-stone-700 hover:bg-stone-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                          : hot
+                            ? "bg-stone-100 text-stone-900 dark:bg-zinc-800 dark:text-zinc-100"
+                            : "text-stone-700 dark:text-zinc-300"
                       )}
                       style={isSel ? { backgroundColor: "var(--accentSoft)", color: "var(--accent)" } : undefined}
                     >

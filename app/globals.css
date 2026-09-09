@@ -159,7 +159,8 @@
   }
 
   ::selection {
-    background: rgba(37, 99, 235, 0.16);
+    /* Accent-tinted per theme (falls back to clean indigo outside the app root). */
+    background: color-mix(in srgb, var(--accent, #4f46e5) 24%, transparent);
   }
 }
 

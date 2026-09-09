@@ -1,14 +1,18 @@
-import { getMergedCompanyList } from "@/lib/sources";
+import { getMergedCompanyList, getUpstreamFreshness } from "@/lib/sources";
 
 export async function GET() {
   try {
-    const { companies, primaryCount, fallbackCount } = await getMergedCompanyList();
+    const [{ companies, primaryCount, fallbackCount }, freshness] = await Promise.all([
+      getMergedCompanyList(),
+      getUpstreamFreshness(),
+    ]);
     return Response.json(
       {
         companies,
         primaryCount,
         fallbackCount,
-        updatedAt: new Date().toISOString(),
+        // Real upstream commit dates (ISO) — the UI shows these as "data as of".
+        dataAsOf: freshness,
       },
       {
         headers: {

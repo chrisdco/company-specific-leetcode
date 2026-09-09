@@ -85,6 +85,10 @@ function acceptanceValue(raw: string): number {
   return n;
 }
 
+// Frequency bands are editorial, not statistical: upstream "frequency" is a
+// per-company relative score (100 = that company's most-tagged problem), so
+// these labels only mean "high *for this result set*". Keep them stable so
+// returning users can rely on the vocabulary.
 function frequencyLabel(raw: string): string {
   const n = frequencyValue(raw);
   if (n >= 70) return "Very high";
@@ -96,6 +100,10 @@ function frequencyLabel(raw: string): string {
 
 const difficultyOrder: Record<string, number> = { Easy: 1, Medium: 2, Hard: 3, Unknown: 4 };
 const SOLVED_KEY = "csl-solved-links-v1";
+/** Cap persisted solved links so decade-long grinding can't bloat localStorage. */
+const MAX_SOLVED_STORED = 3000;
+/** Confirm before generating very large downloads. */
+const CSV_CONFIRM_ROWS = 3000;
 const PAGE_SIZES = [10, 20, 50];
 
 function loadSolved(): Set<string> {
@@ -201,6 +209,24 @@ export default function ProblemTable({
       if (next.has(link)) next.delete(link);
       else next.add(link);
       try {
+        const arr = [...next];
+        localStorage.setItem(
+          SOLVED_KEY,
+          JSON.stringify(arr.length > MAX_SOLVED_STORED ? arr.slice(-MAX_SOLVED_STORED) : arr)
+        );
+      } catch {
+        /* storage unavailable — non-fatal */
+      }
+      return next;
+    });
+  }
+
+  /** Clear solved marks for just this result set (bulk undo after a grind). */
+  function resetSolvedForResults() {
+    setSolved((prev) => {
+      const next = new Set(prev);
+      for (const p of problems) next.delete(p.Link);
+      try {
         localStorage.setItem(SOLVED_KEY, JSON.stringify([...next]));
       } catch {
         /* storage unavailable — non-fatal */
@@ -284,13 +310,16 @@ export default function ProblemTable({
     setSorts((prev) => {
       const idx = prev.findIndex((s) => s.field === field);
       if (!additive) {
-        // plain click: single sort; cycle dir when it's already the only rule
+        // plain click: single sort. Re-clicking the sole active rule cycles
+        // its direction (and finally clears); picking any other column always
+        // starts from that column's natural default so identical gestures
+        // never produce different orders depending on hidden state.
         if (idx === 0 && prev.length === 1) {
           return prev[0].dir === "asc"
             ? [{ field, dir: "desc" }]
             : [];
         }
-        return [{ field, dir: idx >= 0 ? prev[idx].dir : defaultDir(field) }];
+        return [{ field, dir: defaultDir(field) }];
       }
       // Shift+click: toggle/cycle as secondary, keep priority order
       if (idx >= 0) {
@@ -320,7 +349,7 @@ export default function ProblemTable({
     const cls = "h-3.5 w-3.5 shrink-0";
     const badge =
       sorts.length > 1 && meta.active ? (
-        <sup className="t-mono text-[10px] font-bold" style={{ color: "var(--accent)" }}>
+        <sup className="t-mono text-[10px] font-bold" aria-hidden style={{ color: "var(--accent)" }}>
           {meta.order}
         </sup>
       ) : null;
@@ -328,22 +357,33 @@ export default function ProblemTable({
       <span className="inline-flex items-center gap-0.5" aria-hidden>
         {meta.active ? (
           meta.dir === "asc" ? (
-            <ArrowUp className={cls} style={{ color: "var(--accent)" }} />
+            <ArrowUp className={cls} style={{ color: "var(--accent)" }} aria-hidden />
           ) : (
-            <ArrowDown className={cls} style={{ color: "var(--accent)" }} />
+            <ArrowDown className={cls} style={{ color: "var(--accent)" }} aria-hidden />
           )
         ) : (
-          <ArrowUpDown className={cn(cls, "text-stone-300 dark:text-zinc-600")} />
+          <ArrowUpDown className={cn(cls, "text-stone-300 dark:text-zinc-600")} aria-hidden />
         )}
         {badge}
       </span>
     );
   }
 
-  function ariaSort(field: Exclude<SortField, "none">): "ascending" | "descending" | "none" {
+  /** aria-labels carry the multi-sort priority because aria-label overrides
+      inner content — an sr-only span inside would never be announced. */
+  function sortAriaLabel(base: string, field: Exclude<SortField, "none">): string {
     const meta = sortMeta(field);
-    if (!meta.active) return "none";
-    return meta.dir === "asc" ? "ascending" : "descending";
+    if (sorts.length > 1 && meta.active) {
+      return `${base} Currently sort priority ${meta.order} of ${sorts.length}, ${meta.dir === "asc" ? "ascending" : "descending"}.`;
+    }
+    return base;
+  }
+
+  function ariaSort(field: Exclude<SortField, "none">): "ascending" | "descending" | "none" {
+    // Expose only the primary sort: screen readers (and the ARIA spec) model
+    // a single sorted column, even when several rules are stacked visually.
+    if (sorts.length === 0 || sorts[0].field !== field) return "none";
+    return sorts[0].dir === "asc" ? "ascending" : "descending";
   }
 
   function clearFilters() {
@@ -364,6 +404,15 @@ export default function ProblemTable({
   if (showUnsolvedOnly) pills.push({ key: "u", label: "Unsolved", clear: () => setShowUnsolvedOnly(false) });
 
   function exportCsv() {
+    if (
+      filteredAndSorted.length > CSV_CONFIRM_ROWS &&
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Export ${filteredAndSorted.length.toLocaleString()} rows as CSV?`
+      )
+    ) {
+      return;
+    }
     const header = ["Title", "Difficulty", "Frequency %", "Acceptance", "Link", "Companies", "Topics"];
     const lines = filteredAndSorted.map((p) =>
       [
@@ -468,6 +517,16 @@ export default function ProblemTable({
               </span>{" "}
               solved
             </p>
+            {stats.solvedCount > 0 && (
+              <button
+                type="button"
+                onClick={resetSolvedForResults}
+                className="t-caption font-semibold text-stone-400 underline-offset-2 transition-colors hover:text-stone-700 hover:underline dark:text-zinc-500 dark:hover:text-zinc-200"
+                title="Clear solved marks for these results only"
+              >
+                Reset
+              </button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -737,7 +796,7 @@ export default function ProblemTable({
                   <button
                     type="button"
                     onClick={(e) => handleSort("Title", e.shiftKey)}
-                    aria-label="Sort by problem title. Shift-click to add as secondary sort."
+                    aria-label={sortAriaLabel("Sort by problem title. Shift-click to add as secondary sort.", "Title")}
                     title="Shift-click to add as secondary sort"
                     className="t-th flex items-center gap-1.5 py-2.5 text-stone-500 transition-colors hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                   >
@@ -748,7 +807,7 @@ export default function ProblemTable({
                   <button
                     type="button"
                     onClick={(e) => handleSort("Difficulty", e.shiftKey)}
-                    aria-label="Sort by difficulty. Shift-click to add as secondary sort."
+                    aria-label={sortAriaLabel("Sort by difficulty. Shift-click to add as secondary sort.", "Difficulty")}
                     title="Shift-click to add as secondary sort"
                     className="t-th flex items-center gap-1.5 py-2.5 text-stone-500 transition-colors hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                   >
@@ -759,7 +818,7 @@ export default function ProblemTable({
                   <button
                     type="button"
                     onClick={(e) => handleSort("Frequency", e.shiftKey)}
-                    aria-label="Sort by frequency. Shift-click to add as secondary sort."
+                    aria-label={sortAriaLabel("Sort by frequency. Shift-click to add as secondary sort.", "Frequency")}
                     title="Shift-click to add as secondary sort"
                     className="t-th ml-auto flex items-center gap-1.5 py-2.5 text-stone-500 transition-colors hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                   >
@@ -771,7 +830,7 @@ export default function ProblemTable({
                   <button
                     type="button"
                     onClick={(e) => handleSort("Acceptance Rate", e.shiftKey)}
-                    aria-label="Sort by acceptance rate. Shift-click to add as secondary sort."
+                    aria-label={sortAriaLabel("Sort by acceptance rate. Shift-click to add as secondary sort.", "Acceptance Rate")}
                     title="Shift-click to add as secondary sort"
                     className="t-th ml-auto flex items-center gap-1.5 py-2.5 text-stone-500 transition-colors hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                   >

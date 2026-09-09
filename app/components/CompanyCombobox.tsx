@@ -53,7 +53,11 @@ export default function CompanyCombobox({
     return pool;
   }, [companies, query]);
 
-  useEffect(() => setHighlight(0), [filtered.length]);
+  // Preserve keyboard position across keystrokes; only clamp when the
+  // list shrinks past it (resetting to 0 on every keypress felt broken).
+  useEffect(() => {
+    setHighlight((h) => (filtered.length === 0 || h < filtered.length ? h : 0));
+  }, [filtered]);
 
   function toggle(c: string) {
     if (selected.includes(c)) {
@@ -130,7 +134,15 @@ export default function CompanyCombobox({
               e.preventDefault();
               setHighlight((h) => Math.max(h - 1, 0));
             } else if (e.key === "Enter") {
-              if (open && filtered[highlight]) {
+              // Prefer an exact match over whatever happens to be highlighted —
+              // typing a full name + Enter must not add a different prefix hit.
+              const exact = query.trim()
+                ? companies.find((c) => c.toLowerCase() === query.trim().toLowerCase())
+                : undefined;
+              if (exact && (!open || filtered.includes(exact))) {
+                e.preventDefault();
+                toggle(exact);
+              } else if (open && filtered[highlight]) {
                 e.preventDefault();
                 toggle(filtered[highlight]);
               }
@@ -172,7 +184,7 @@ export default function CompanyCombobox({
                       onClick={() => toggle(c)}
                       disabled={!isSel && atMax}
                       className={cn(
-                        "t-small flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors disabled:opacity-40",
+                        "t-small flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left transition-colors disabled:opacity-40 [@media(pointer:coarse)]:min-h-11",
                         active ? "bg-stone-100 text-stone-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-stone-700 dark:text-zinc-300"
                       )}
                     >

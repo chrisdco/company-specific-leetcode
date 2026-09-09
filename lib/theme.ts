@@ -13,8 +13,6 @@ export interface ThemeTokens {
   accentSoft: string;
   buttonBg: string;
   buttonText: string;
-  radiusCard: string;
-  radiusControl: string;
 }
 
 export const cleanTheme: ThemeTokens = {
@@ -30,8 +28,6 @@ export const cleanTheme: ThemeTokens = {
   accentSoft: "#eef2ff", // indigo-50
   buttonBg: "#18181b", // zinc-900 near-black primary (Vercel/Linear idiom)
   buttonText: "#ffffff",
-  radiusCard: "0.75rem",
-  radiusControl: "0.5rem",
 };
 
 export const darkTheme: ThemeTokens = {
@@ -47,8 +43,6 @@ export const darkTheme: ThemeTokens = {
   accentSoft: "rgba(129, 140, 248, 0.14)",
   buttonBg: "#fafafa",
   buttonText: "#09090b",
-  radiusCard: "0.75rem",
-  radiusControl: "0.5rem",
 };
 
 export const pandaTheme: ThemeTokens = {  name: "panda",
@@ -63,8 +57,6 @@ export const pandaTheme: ThemeTokens = {  name: "panda",
   accentSoft: "rgba(132, 160, 169, 0.12)",
   buttonBg: "#4e737a",
   buttonText: "#ffffff",
-  radiusCard: "1.5rem",
-  radiusControl: "1rem",
 };
 
 // Accessible difficulty colors — shared by both themes (WCAG AA on white).

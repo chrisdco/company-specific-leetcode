@@ -190,8 +190,7 @@ export async function getMergedCompanyList(): Promise<{
   companies: string[];
   primaryCount: number;
   fallbackCount: number;
-}> {
-  const cached = getCached<{ companies: string[]; primaryCount: number; fallbackCount: number }>(
+}> {  const cached = getCached<{ companies: string[]; primaryCount: number; fallbackCount: number }>(
     "companies-merged"
   );
   if (cached) return cached;
@@ -218,6 +217,41 @@ export async function getMergedCompanyList(): Promise<{
   const result = { companies, primaryCount: primary.length, fallbackCount: fallback.length };
   setCached("companies-merged", result, COMPANY_TTL_MS);
   return result;
+}
+
+export interface UpstreamFreshness {
+  primary: string | null;
+  fallback: string | null;
+}
+
+/** Latest upstream commit dates (ISO) so the UI can show a real "data as of" date. */
+export async function getUpstreamFreshness(): Promise<UpstreamFreshness> {
+  const cached = getCached<UpstreamFreshness>("upstream-freshness");
+  if (cached) return cached;
+  const pick = (json: unknown): string | null => {
+    if (!Array.isArray(json) || json.length === 0) return null;
+    const c = (json[0] as { commit?: { committer?: { date?: string }; author?: { date?: string } } })?.commit;
+    return c?.committer?.date ?? c?.author?.date ?? null;
+  };
+  try {
+    const [p, f] = await Promise.all([
+      fetchWithTimeout(
+        "https://api.github.com/repos/liquidslr/leetcode-company-wise-problems/commits?per_page=1"
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      fetchWithTimeout(
+        "https://api.github.com/repos/snehasishroy/leetcode-companywise-interview-questions/commits?per_page=1"
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ]);
+    const result = { primary: pick(p), fallback: pick(f) };
+    setCached("upstream-freshness", result, COMPANY_TTL_MS);
+    return result;
+  } catch {
+    return { primary: null, fallback: null };
+  }
 }
 
 /** Resolve a canonical company name to a fallback slug via fuzzy match. */
@@ -337,6 +371,11 @@ export async function getProblemsWithFallback(
   const url = `${FALLBACK_RAW}/${encodeURIComponent(slug)}/${encodeURIComponent(fallbackFile)}`;
   const csv = await fetchCsvText(url);
   const problems = parseFallbackCsv(csv, company);
+  // Don't cache empty results: an empty parse (or a partially-synced upstream
+  // folder) should be retried next time instead of served stale for an hour.
+  if (problems.length === 0) {
+    return { problems, source: "fallback" as DataSource, fallbackUsed: true };
+  }
   const result = { problems, source: "fallback" as DataSource, fallbackUsed: true };
   setCached(cacheKey, result, PROBLEMS_TTL_MS);
   return result;

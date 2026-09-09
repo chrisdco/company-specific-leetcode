@@ -25,15 +25,9 @@ import {
   History,
 } from "lucide-react";
 import { cleanTheme, darkTheme, pandaTheme, type ThemeName } from "@/lib/theme";
+import { TIME_OPTIONS } from "@/lib/sources";
+import { mergeCompanyResults, type MergedSource } from "@/lib/merge";
 import { cn } from "@/lib/utils";
-
-const TIME_OPTIONS = [
-  "Thirty Days",
-  "Three Months",
-  "Six Months",
-  "More Than Six Months",
-  "All",
-] as const;
 
 const TIME_HINT: Record<string, string> = {
   "Thirty Days": "Hottest right now — start here",
@@ -43,7 +37,7 @@ const TIME_HINT: Record<string, string> = {
   All: "Everything tagged, all time",
 };
 
-type SourceKind = "primary" | "fallback" | "mixed";
+type SourceKind = MergedSource;
 
 type ProblemsPayload = {
   company: string;
@@ -58,6 +52,7 @@ const RECENT_KEY = "csl-recent-companies-v1";
 const VALID_THEMES: ThemeName[] = ["clean", "dark", "panda"];
 
 function loadRecent(): string[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(RECENT_KEY);
     if (!raw) return [];
@@ -66,37 +61,6 @@ function loadRecent(): string[] {
   } catch {
     return [];
   }
-}
-
-const DIFF_RANK: Record<string, number> = { Unknown: 0, Easy: 1, Medium: 2, Hard: 3 };
-
-/** Union problems across companies: max frequency, hardest difficulty, topic union. */
-function mergeCompanyResults(
-  results: { company: string; problems: Problem[]; source: "primary" | "fallback" }[]
-): { problems: Problem[]; source: SourceKind } {
-  const byLink = new Map<string, Problem>();
-  for (const { company, problems } of results) {
-    for (const p of problems) {
-      const ex = byLink.get(p.Link);
-      if (!ex) {
-        byLink.set(p.Link, { ...p, Company: company, Companies: [company], Topics: [...(p.Topics ?? [])] });
-      } else {
-        const ef = parseFloat(String(ex.Frequency).replace("%", "")) || 0;
-        const pf = parseFloat(String(p.Frequency).replace("%", "")) || 0;
-        if (pf > ef) ex.Frequency = p.Frequency;
-        if ((DIFF_RANK[p.Difficulty] ?? 0) > (DIFF_RANK[ex.Difficulty] ?? 0)) ex.Difficulty = p.Difficulty;
-        ex.Topics = Array.from(new Set([...(ex.Topics ?? []), ...(p.Topics ?? [])]));
-        if (ex["Acceptance Rate"] === "N/A" && p["Acceptance Rate"] !== "N/A") {
-          ex["Acceptance Rate"] = p["Acceptance Rate"];
-        }
-        ex.Companies = Array.from(new Set([...(ex.Companies ?? [ex.Company]), company]));
-      }
-    }
-  }
-  const sources = new Set(results.map((r) => r.source));
-  const source: SourceKind =
-    sources.size === 1 ? (results[0].source as SourceKind) : "mixed";
-  return { problems: [...byLink.values()], source };
 }
 
 const PANDA_FLOATERS = [
@@ -140,14 +104,31 @@ function StatusDot({ tone, pulse = false }: { tone: "accent" | "amber" | "emeral
   );
 }
 
+function formatAsOf(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 export default function Home() {
-  const [theme, setTheme] = useState<ThemeName>("clean");
+  // Lazy init from storage so the first paint already matches a returning
+  // visitor (no light-flash for dark users). The wrapper below carries
+  // suppressHydrationWarning because the prerendered HTML always uses defaults.
+  const [theme, setTheme] = useState<ThemeName>(() => {
+    if (typeof window === "undefined") return "clean";
+    try {
+      const saved = window.localStorage.getItem("csl-theme");
+      if (saved === "panda" || saved === "dark" || saved === "clean") return saved;
+    } catch { /* ignore */ }
+    return "clean";
+  });
   const [companies, setCompanies] = useState<string[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [companiesError, setCompaniesError] = useState("");
   const [companyMeta, setCompanyMeta] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<string[]>(loadRecent);
   const [time, setTime] = useState<string>("All");
   const [problems, setProblems] = useState<Problem[]>([]);
   const [source, setSource] = useState<SourceKind>("primary");
@@ -158,18 +139,12 @@ export default function Home() {
   const [partialWarning, setPartialWarning] = useState("");
   const [focusTop30, setFocusTop30] = useState(false);
   const [lastFetched, setLastFetched] = useState<{ selected: string[]; time: string } | null>(null);
+  const [freshness, setFreshness] = useState<{ primary: string | null; fallback: string | null } | null>(null);
 
   const t = theme === "panda" ? pandaTheme : theme === "dark" ? darkTheme : cleanTheme;
   const isPanda = theme === "panda";
 
-  // theme: restore + persist
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("csl-theme");
-      if (saved === "panda" || saved === "dark" || saved === "clean") setTheme(saved);
-      setRecent(loadRecent());
-    } catch { /* ignore */ }
-  }, []);
+  // theme: persist (restore happens in the lazy useState initializer above)
   useEffect(() => {
     try {
       localStorage.setItem("csl-theme", theme);
@@ -224,6 +199,9 @@ export default function Home() {
           setCompanyMeta(`${sorted.length} companies · primary ${data.primaryCount} + fallback ${data.fallbackCount}`);
         } else {
           setCompanyMeta(`${sorted.length} companies`);
+        }
+        if (!Array.isArray(data) && data.dataAsOf) {
+          setFreshness(data.dataAsOf);
         }
       } catch (e) {
         console.error("Failed to fetch companies:", e);
@@ -323,13 +301,14 @@ export default function Home() {
   );
 
   // Stale = user changed something since the last successful load → nudge to re-click.
+  // Compared as sets so merely reordering chips doesn't cry wolf.
   const stale =
     hasSearched &&
     !loading &&
     lastFetched !== null &&
     (lastFetched.time !== time ||
       lastFetched.selected.length !== selected.length ||
-      lastFetched.selected.some((c, i) => c !== selected[i]));
+      lastFetched.selected.some((c) => !selected.includes(c)));
   const readyToLoad = !hasSearched && selected.length > 0 && !loading && !companiesLoading && !companiesError;
   const needsAction = (readyToLoad || stale) && !loading;
   const buttonLabel = loading
@@ -352,6 +331,7 @@ export default function Home() {
   return (
     <div
       data-theme={theme}
+      suppressHydrationWarning
       className="min-h-screen"
       style={
         {
@@ -523,6 +503,10 @@ export default function Home() {
                         Fetching{progress && progress.total > 1 ? ` company ${Math.min(progress.done + 1, progress.total)} of ${progress.total}` : ""}…
                       </span>
                     </>
+                  ) : selected.length === 0 && !companiesLoading && !companiesError ? (
+                    <span className="text-stone-500 dark:text-zinc-400">
+                      Pick one or more companies above to begin.
+                    </span>
                   ) : readyToLoad ? (
                     <>
                       <StatusDot tone="accent" pulse />
@@ -600,6 +584,16 @@ export default function Home() {
             <p className="t-mono mt-3 text-[11.5px] text-stone-400 dark:text-zinc-500" aria-live="polite">
               {sourceLabel}
               {"  ·  "}{selected.join(" + ")} · {time}{focusTop30 ? " · top 30" : ""} · n={problems.length}
+              {(() => {
+                const iso =
+                  source === "primary"
+                    ? freshness?.primary
+                    : source === "fallback"
+                      ? freshness?.fallback
+                      : [freshness?.primary, freshness?.fallback].filter(Boolean).sort().reverse()[0];
+                const label = formatAsOf(iso ?? null);
+                return label ? ` · data as of ${label}` : null;
+              })()}
             </p>
           )}
 
@@ -621,8 +615,10 @@ export default function Home() {
           <footer className="prose-measure mt-10 border-t border-stone-200 pt-5 dark:border-zinc-800">
             <p className="t-caption text-stone-500 dark:text-zinc-400">
               Frequency is the best frequency seen across your selected companies (100 = most-asked
-              there), not a hiring probability. Tags are user-reported LeetCode Premium data — noisy for
-              small companies. Acceptance rates are repaired from upstream scale errors; treat as rough.
+              there), not a hiring probability. Difficulty and acceptance follow the
+              highest-frequency source so multi-company merges are deterministic. Tags are
+              user-reported LeetCode Premium data — noisy for small companies. Acceptance rates are
+              repaired from upstream scale errors; treat as rough.
             </p>
             <p className="t-caption mt-2 flex flex-wrap items-center gap-x-2 text-stone-400 dark:text-zinc-500">
               <span className="inline-flex items-center gap-1">
