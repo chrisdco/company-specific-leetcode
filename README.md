@@ -1,9 +1,12 @@
 # Company LeetCode Lists
 
 Pick up to 5 companies, filter by recency and frequency, and prep against what
-they actually ask. Company-tagged questions across 700+ companies, with sortable
-stats, topic filters, per-company compare view, solved tracking, Top-30 focus
-mode, CSV export, and Light / Dark / Panda themes. Every view is a shareable link.
+they actually ask.
+
+- Company-tagged questions across 700+ companies, with real data-freshness dates
+- Sortable frequency + acceptance stats, topic filters, per-company compare view
+- Light / Dark / Panda themes; every view is a shareable link
+- Solved tracking, Top-30 focus mode, one-click CSV export
 
 ![Company LeetCode Lists preview](docs/preview.png)
 
