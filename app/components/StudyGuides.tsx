@@ -40,7 +40,7 @@ const GUIDES = [
 export default function StudyGuides() {
   return (
     <section aria-labelledby="study-guides-heading" className="mt-8">
-      <p className="t-eyebrow text-stone-400 dark:text-zinc-500">Study path</p>
+      <p className="t-eyebrow text-stone-500 dark:text-zinc-400">Study path</p>
       <h2 id="study-guides-heading" className="t-h2 mt-1 text-stone-900 dark:text-zinc-100">
         Learn patterns first, then target companies
       </h2>
@@ -60,12 +60,12 @@ export default function StudyGuides() {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="t-h3 flex items-center gap-1.5 text-stone-900 dark:text-zinc-100">
-                <ListOrdered className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
+                <ListOrdered className="h-3.5 w-3.5 text-stone-500 dark:text-zinc-400" aria-hidden />
                 {g.name}
               </span>
               <ExternalLink className="h-3.5 w-3.5 shrink-0 text-stone-300 transition-colors group-hover:text-stone-500 dark:text-zinc-600 dark:group-hover:text-zinc-300" aria-hidden />
             </div>
-            <p className="t-mono mt-1.5 text-[11.5px] text-stone-400 dark:text-zinc-500">
+            <p className="t-mono mt-1.5 text-[11.5px] text-stone-500 dark:text-zinc-400">
               {g.count} · {g.time}
             </p>
             <p className="t-small mt-2 text-stone-600 dark:text-zinc-400">{g.blurb}</p>

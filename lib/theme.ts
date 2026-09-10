@@ -17,7 +17,7 @@ export interface ThemeTokens {
 
 export const cleanTheme: ThemeTokens = {
   name: "clean",
-  label: "Clean",
+  label: "Light",
   pageBg: "#e8e6e1", // deeper warm paper — white cards sit *in* it, less glare
   headerBg: "#f1efe9",
   cardBg: "#ffffff",
@@ -48,7 +48,9 @@ export const darkTheme: ThemeTokens = {
 export const pandaTheme: ThemeTokens = {  name: "panda",
   label: "Panda",
   pageBg: "#d3cac2",
-  headerBg: "rgba(132, 160, 169, 0.10)",
+  // Solid header a touch deeper than the page: the old 10% wash was
+  // indistinguishable from the page, satisfying neither structure nor flatness.
+  headerBg: "#c6bbb0",
   cardBg: "rgba(255, 255, 255, 0.92)",
   cardBorder: "#4e737a",
   text: "#33433f",

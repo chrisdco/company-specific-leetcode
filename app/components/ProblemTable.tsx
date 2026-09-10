@@ -39,63 +39,44 @@ import {
   Info,
   ArrowUpDown,
   ArrowUpToLine,
+  Columns3,
   Download,
 } from "lucide-react";
 import { Problem } from "../types/problem";
 import { getDifficultyStyle, type ThemeName } from "@/lib/theme";
+import {
+  acceptanceValue,
+  formatAcceptance,
+  formatFrequency,
+  frequencyLabel,
+  frequencyValue,
+} from "@/lib/format";
+import { problemsToCsv } from "@/lib/csv";
 import TopicMultiSelect from "./TopicMultiSelect";
 import { cn } from "@/lib/utils";
 
-type SortField = keyof Problem | "none";
+type SortField = keyof Problem | `freq:${string}` | "none";
 type SortDirection = "asc" | "desc";
 interface SortRule {
   field: Exclude<SortField, "none">;
   dir: SortDirection;
 }
 
-// --- client-side defensive formatters (server already normalizes) ---
-function formatFrequency(raw: string): string {
-  let n = parseFloat(String(raw ?? "").replace("%", ""));
-  if (!Number.isFinite(n)) return "—";
-  if (n > 0 && n <= 1) n *= 100;
-  return `${Math.round(n * 10) / 10}%`;
+/** `freq:Acme` secondary field id for per-company compare columns. */
+function freqField(company: string): Exclude<SortField, "none"> {
+  return `freq:${company}` as Exclude<SortField, "none">;
 }
-function frequencyValue(raw: string): number {
-  let n = parseFloat(String(raw ?? "").replace("%", ""));
-  if (!Number.isFinite(n)) return 0;
-  if (n > 0 && n <= 1) n *= 100;
-  return n;
-}
-function formatAcceptance(raw: string): string {
-  const s = String(raw ?? "").trim();
-  if (!s || s === "N/A" || s === "-") return "N/A";
-  const hadPercent = s.includes("%");
-  let n = parseFloat(s.replace("%", ""));
-  if (!Number.isFinite(n)) return "N/A";
-  if (!hadPercent && n > 0 && n <= 1) n *= 100;
-  if (n > 0 && n < 2) n *= 100;
-  return `${Math.round(n * 10) / 10}%`;
-}
-function acceptanceValue(raw: string): number {
-  const s = String(raw ?? "").trim().replace("%", "");
-  let n = parseFloat(s);
-  if (!Number.isFinite(n)) return 0;
-  if (n > 0 && n <= 1) n *= 100;
-  if (n > 0 && n < 2) n *= 100;
-  return n;
+function freqCompany(field: string): string | null {
+  return field.startsWith("freq:") ? field.slice("freq:".length) : null;
 }
 
-// Frequency bands are editorial, not statistical: upstream "frequency" is a
-// per-company relative score (100 = that company's most-tagged problem), so
-// these labels only mean "high *for this result set*". Keep them stable so
-// returning users can rely on the vocabulary.
-function frequencyLabel(raw: string): string {
-  const n = frequencyValue(raw);
-  if (n >= 70) return "Very high";
-  if (n >= 50) return "High";
-  if (n >= 30) return "Medium";
-  if (n >= 10) return "Low";
-  return "Very low";
+function readTableParams(): URLSearchParams | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return new URLSearchParams(window.location.search);
+  } catch {
+    return null;
+  }
 }
 
 const difficultyOrder: Record<string, number> = { Easy: 1, Medium: 2, Hard: 3, Unknown: 4 };
@@ -139,9 +120,17 @@ function compareBy(rule: SortRule, a: Problem, b: Problem): number {
   } else if (f === "Title") {
     av = a.Title.toLowerCase();
     bv = b.Title.toLowerCase();
+  } else if (freqCompany(f) !== null) {
+    // Per-company compare column: missing values sort last either direction.
+    const c = freqCompany(f) as string;
+    const avRaw = a.Frequencies?.[c];
+    const bvRaw = b.Frequencies?.[c];
+    av = avRaw === undefined ? -1 : frequencyValue(avRaw);
+    bv = bvRaw === undefined ? -1 : frequencyValue(bvRaw);
   } else {
-    av = String(a[f] ?? "").toLowerCase();
-    bv = String(b[f] ?? "").toLowerCase();
+    const key = f as keyof Problem;
+    av = String(a[key] ?? "").toLowerCase();
+    bv = String(b[key] ?? "").toLowerCase();
   }
   if (av < bv) return rule.dir === "asc" ? -1 : 1;
   if (av > bv) return rule.dir === "asc" ? 1 : -1;
@@ -165,16 +154,33 @@ export default function ProblemTable({
 }) {
   // Multi-column sort: plain click = single sort, Shift+click = add/toggle secondary.
   const [sorts, setSorts] = useState<SortRule[]>([{ field: "Frequency", dir: "desc" }]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
-  const [topicFilter, setTopicFilter] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  // Filter state restores from the URL so filtered views are shareable and
+  // survive refresh (written back by the sync effect below).
+  const [searchTerm, setSearchTerm] = useState(() => readTableParams()?.get("q") ?? "");
+  const [difficultyFilter, setDifficultyFilter] = useState<string>(() => {
+    const d = readTableParams()?.get("difficulty");
+    return d && d.trim() ? d : "all";
+  });
+  const [topicFilter, setTopicFilter] = useState<string[]>(() => {
+    const sp = readTableParams();
+    return sp ? sp.getAll("topic").filter(Boolean) : [];
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = parseInt(readTableParams()?.get("page") ?? "", 10);
+    return Number.isFinite(p) && p >= 1 ? p : 1;
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    const p = parseInt(readTableParams()?.get("rows") ?? "", 10);
+    return PAGE_SIZES.includes(p) ? p : 20;
+  });
   const [jumpVal, setJumpVal] = useState("");
   // loadSolved is SSR-safe (storage access is try/caught) and problems start
   // empty, so hydrating from storage here can't mismatch the first paint.
   const [solved, setSolved] = useState<Set<string>>(loadSolved);
-  const [showUnsolvedOnly, setShowUnsolvedOnly] = useState(false);
+  const [showUnsolvedOnly, setShowUnsolvedOnly] = useState(
+    () => readTableParams()?.get("unsolved") === "1"
+  );
+  const [compare, setCompare] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const isPanda = theme === "panda";
@@ -237,10 +243,40 @@ export default function ProblemTable({
     });
   }
 
+  /** Mark every problem on the current page solved. */
+  function markPageSolved() {
+    setSolved((prev) => {
+      const next = new Set(prev);
+      for (const p of paginated) next.add(p.Link);
+      try {
+        const arr = [...next];
+        localStorage.setItem(
+          SOLVED_KEY,
+          JSON.stringify(arr.length > MAX_SOLVED_STORED ? arr.slice(-MAX_SOLVED_STORED) : arr)
+        );
+      } catch {
+        /* storage unavailable — non-fatal */
+      }
+      return next;
+    });
+  }
+
+  /** Legend/difficulty shortcuts share one toggle. */
+  function toggleDifficulty(d: string) {
+    setDifficultyFilter((prev) => (prev === d ? "all" : d));
+    setCurrentPage(1);
+  }
+
   const uniqueDifficulties = useMemo(
     () => Array.from(new Set(problems.map((p) => p.Difficulty))).sort(),
     [problems]
   );
+  // Unknown difficulty values (e.g. stale shared links) degrade to "all"
+  // instead of silently emptying the results.
+  const effectiveDifficulty =
+    difficultyFilter === "all" || uniqueDifficulties.includes(difficultyFilter)
+      ? difficultyFilter
+      : "all";
   const uniqueTopics = useMemo(
     () => Array.from(new Set(problems.flatMap((p) => p.Topics ?? []))).sort(),
     [problems]
@@ -250,6 +286,15 @@ export default function ProblemTable({
     () => problems.some((p) => (p.Companies ?? []).length > 1),
     [problems]
   );
+  /** Distinct companies across the result set — drives compare columns. */
+  const compareCompanies = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of problems) {
+      for (const c of p.Companies ?? [p.Company]) s.add(c);
+    }
+    return [...s].sort((a, b) => a.localeCompare(b));
+  }, [problems]);
+  const canCompare = compareCompanies.length > 1;
 
   const stats = useMemo(() => {
     let easy = 0,
@@ -284,7 +329,7 @@ export default function ProblemTable({
         (problem.Topics ?? []).some((t) => t.toLowerCase().includes(q)) ||
         (problem.Companies ?? []).some((c) => c.toLowerCase().includes(q));
       const matchesDifficulty =
-        difficultyFilter === "all" || problem.Difficulty === difficultyFilter;
+        effectiveDifficulty === "all" || problem.Difficulty === effectiveDifficulty;
       const matchesTopic =
         topicFilter.length === 0 ||
         topicFilter.some((t) => (problem.Topics ?? []).includes(t));
@@ -300,12 +345,37 @@ export default function ProblemTable({
       }
       return 0;
     });
-  }, [problems, searchTerm, difficultyFilter, topicFilter, showUnsolvedOnly, solved, sorts]);
+  }, [problems, searchTerm, effectiveDifficulty, topicFilter, showUnsolvedOnly, solved, sorts]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
   const paginated = filteredAndSorted.slice(startIndex, startIndex + pageSize);
+
+  // Write filter state back to the URL (company/time/theme keys belong to the
+  // page effect — each writer preserves the other's keys, and replaceState
+  // never re-triggers effects, so they can't loop). Lives down here because
+  // it reads safePage.
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (searchTerm.trim()) sp.set("q", searchTerm.trim());
+      else sp.delete("q");
+      if (effectiveDifficulty !== "all") sp.set("difficulty", effectiveDifficulty);
+      else sp.delete("difficulty");
+      sp.delete("topic");
+      for (const t of topicFilter) sp.append("topic", t);
+      if (showUnsolvedOnly) sp.set("unsolved", "1");
+      else sp.delete("unsolved");
+      if (pageSize !== 20) sp.set("rows", String(pageSize));
+      else sp.delete("rows");
+      if (safePage !== 1) sp.set("page", String(safePage));
+      else sp.delete("page");
+      window.history.replaceState(null, "", `?${sp.toString()}`);
+    } catch {
+      /* ignore */
+    }
+  }, [searchTerm, effectiveDifficulty, topicFilter, showUnsolvedOnly, pageSize, safePage]);
 
   function handleSort(field: Exclude<SortField, "none">, additive: boolean) {
     setCurrentPage(1);
@@ -399,7 +469,7 @@ export default function ProblemTable({
 
   const pills: { key: string; label: string; clear: () => void }[] = [];
   if (searchTerm.trim()) pills.push({ key: "q", label: `“${searchTerm.trim()}”`, clear: () => { setSearchTerm(""); setCurrentPage(1); } });
-  if (difficultyFilter !== "all") pills.push({ key: "d", label: difficultyFilter, clear: () => { setDifficultyFilter("all"); setCurrentPage(1); } });
+  if (effectiveDifficulty !== "all") pills.push({ key: "d", label: effectiveDifficulty, clear: () => { setDifficultyFilter("all"); setCurrentPage(1); } });
   for (const t of topicFilter) {
     pills.push({ key: `t:${t}`, label: t, clear: () => { setTopicFilter((prev) => prev.filter((x) => x !== t)); setCurrentPage(1); } });
   }
@@ -415,21 +485,7 @@ export default function ProblemTable({
     ) {
       return;
     }
-    const header = ["Title", "Difficulty", "Frequency %", "Acceptance", "Link", "Companies", "Topics"];
-    const lines = filteredAndSorted.map((p) =>
-      [
-        p.Title,
-        p.Difficulty,
-        formatFrequency(p.Frequency),
-        formatAcceptance(p["Acceptance Rate"]),
-        p.Link,
-        (p.Companies ?? [p.Company]).join("; "),
-        (p.Topics ?? []).join("; "),
-      ]
-        .map((c) => `"${String(c).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [header.map((h) => `"${h}"`).join(","), ...lines].join("\n");
+    const csv = problemsToCsv(filteredAndSorted);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -472,7 +528,7 @@ export default function ProblemTable({
             </div>
           ))}
         </div>
-        <p className="t-caption mt-4 text-stone-400 dark:text-zinc-500">Fetching company data…</p>
+        <p className="t-caption mt-4 text-stone-500 dark:text-zinc-400">Fetching company data…</p>
       </div>
     );
   }
@@ -486,7 +542,7 @@ export default function ProblemTable({
         )}
       >
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 dark:bg-zinc-800" aria-hidden>
-          <Search className="h-5 w-5 text-stone-400 dark:text-zinc-500" />
+          <Search className="h-5 w-5 text-stone-500 dark:text-zinc-400" />
         </span>
         <h3 className="t-h2 mt-4 text-stone-900 dark:text-zinc-100">No problems yet</h3>
         <p className="t-small prose-measure mt-1.5 text-stone-600 dark:text-zinc-400">
@@ -506,14 +562,14 @@ export default function ProblemTable({
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h2 className="t-h2 text-stone-900 dark:text-zinc-100">Results</h2>
-          <p className="tnum text-[12px] font-medium text-stone-400 dark:text-zinc-500">
+          <p className="tnum text-[12px] font-medium text-stone-500 dark:text-zinc-400">
             {filteredAndSorted.length !== problems.length
               ? `${filteredAndSorted.length} of ${problems.length}`
               : `${problems.length} problems`}
           </p>
           <div className="ml-auto flex items-center gap-2">
             <p className="t-caption flex items-center gap-1.5 text-stone-500 dark:text-zinc-400">
-              <CircleCheck className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
+              <CircleCheck className="h-3.5 w-3.5 text-stone-500 dark:text-zinc-400" aria-hidden />
               <span className="tnum font-semibold text-stone-700 dark:text-zinc-200">
                 {stats.solvedCount}/{stats.total}
               </span>{" "}
@@ -523,11 +579,34 @@ export default function ProblemTable({
               <button
                 type="button"
                 onClick={resetSolvedForResults}
-                className="t-caption font-semibold text-stone-400 underline-offset-2 transition-colors hover:text-stone-700 hover:underline dark:text-zinc-500 dark:hover:text-zinc-200"
+                className="t-caption font-semibold text-stone-500 underline-offset-2 transition-colors hover:text-stone-700 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
                 title="Clear solved marks for these results only"
               >
                 Reset
               </button>
+            )}
+            {paginated.some((p) => !solved.has(p.Link)) && (
+              <button
+                type="button"
+                onClick={markPageSolved}
+                className="t-caption font-semibold text-stone-500 underline-offset-2 transition-colors hover:text-stone-700 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
+                title="Mark every problem on this page solved"
+              >
+                Mark page
+              </button>
+            )}
+            {canCompare && (
+              <Button
+                variant={compare ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCompare((v) => !v)}
+                className="h-8 rounded-lg text-[13px] font-semibold"
+                aria-pressed={compare}
+                title="One frequency column per company"
+              >
+                <Columns3 className="h-3.5 w-3.5" aria-hidden />
+                Compare
+              </Button>
             )}
             <Button
               variant="outline"
@@ -542,29 +621,55 @@ export default function ProblemTable({
             </Button>
           </div>
         </div>
-        {/* Difficulty mix — proportional, doubles as legend */}
+        {/* Difficulty mix — proportional bars that double as filter toggles */}
         <div
-          className="mt-3 flex h-1.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-zinc-800"
-          role="img"
-          aria-label={`${stats.Easy} easy, ${stats.Medium} medium, ${stats.Hard} hard`}
+          className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-zinc-800"
+          role="group"
+          aria-label="Filter by difficulty"
         >
-          <div style={{ width: `${stats.easyPct}%`, backgroundColor: "#059669" }} />
-          <div style={{ width: `${stats.medPct}%`, backgroundColor: "#d97706" }} />
-          <div style={{ width: `${stats.hardPct}%`, backgroundColor: "#e11d48" }} />
+          {(
+            [
+              { name: "Easy", pct: stats.easyPct, count: stats.Easy, color: "#059669" },
+              { name: "Medium", pct: stats.medPct, count: stats.Medium, color: "#d97706" },
+              { name: "Hard", pct: stats.hardPct, count: stats.Hard, color: "#e11d48" },
+            ] as const
+          ).map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              onClick={() => toggleDifficulty(s.name)}
+              aria-pressed={effectiveDifficulty === s.name}
+              title={`${s.count} ${s.name} — click to filter`}
+              aria-label={`${s.count} ${s.name} problems. Activate to filter.`}
+              style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+              className="h-full min-w-1 transition-opacity hover:opacity-80 focus-visible:opacity-80"
+            />
+          ))}
         </div>
-        <div className="t-caption mt-2 flex flex-wrap gap-x-4 gap-y-1 text-stone-500 dark:text-zinc-400">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-600" aria-hidden />
-            <span className="tnum font-semibold text-stone-700 dark:text-zinc-200">{stats.Easy}</span> Easy
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-amber-600" aria-hidden />
-            <span className="tnum font-semibold text-stone-700 dark:text-zinc-200">{stats.Medium}</span> Medium
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-rose-600" aria-hidden />
-            <span className="tnum font-semibold text-stone-700 dark:text-zinc-200">{stats.Hard}</span> Hard
-          </span>
+        <div className="t-caption mt-2 flex flex-wrap gap-x-2 gap-y-1 text-stone-500 dark:text-zinc-400">
+          {(
+            [
+              { name: "Easy", count: stats.Easy, dot: "bg-emerald-600" },
+              { name: "Medium", count: stats.Medium, dot: "bg-amber-600" },
+              { name: "Hard", count: stats.Hard, dot: "bg-rose-600" },
+            ] as const
+          ).map((s) => {
+            const active = effectiveDifficulty === s.name;
+            return (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => toggleDifficulty(s.name)}
+                aria-pressed={active}
+                title={`Filter: ${s.name}`}
+                className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-stone-100 dark:hover:bg-zinc-800"
+                style={active ? { boxShadow: "0 0 0 2px var(--accentSoft)" } : undefined}
+              >
+                <span className={cn("inline-block h-2 w-2 rounded-full", s.dot)} aria-hidden />
+                <span className="tnum font-semibold text-stone-700 dark:text-zinc-200">{s.count}</span> {s.name}
+              </button>
+            );
+          })}
         </div>
         {stats.total > 0 && (
           <div
@@ -590,7 +695,7 @@ export default function ProblemTable({
         <div className="flex flex-col flex-wrap gap-2.5 sm:flex-row">
           <div className="relative min-w-0 flex-1 basis-56">
             <Search
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-zinc-500"
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-zinc-400"
               aria-hidden
             />
             <Input
@@ -613,7 +718,7 @@ export default function ProblemTable({
             }}
           >
             <SelectTrigger className="w-full sm:w-40" aria-label="Filter by difficulty">
-              <Filter className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
+              <Filter className="h-3.5 w-3.5 text-stone-500 dark:text-zinc-400" aria-hidden />
               <SelectValue placeholder="Difficulty" />
             </SelectTrigger>
             <SelectContent>
@@ -672,18 +777,18 @@ export default function ProblemTable({
             <button
               type="button"
               onClick={clearFilters}
-              className="t-caption font-semibold text-stone-400 underline-offset-2 transition-colors hover:text-stone-700 hover:underline dark:text-zinc-500 dark:hover:text-zinc-200"
+              className="t-caption font-semibold text-stone-500 underline-offset-2 transition-colors hover:text-stone-700 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
             >
               Clear all
             </button>
           </div>
         )}
 
-        <p className="t-caption mt-2.5 text-stone-400 dark:text-zinc-500">
+        <p className="t-caption mt-2.5 text-stone-500 dark:text-zinc-400">
           Tip: Shift+click column headers to sort by more than one column.
           {fallbackUsed && (
             <span className="mt-1 flex items-start gap-1.5 text-stone-500 dark:text-zinc-400">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-400 dark:text-zinc-500" aria-hidden />
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-500 dark:text-zinc-400" aria-hidden />
               Topics aren&apos;t available for this result (fallback dataset) — search and the
               topic filter cover titles only.
             </span>
@@ -718,12 +823,27 @@ export default function ProblemTable({
                 <span className="tnum text-[13px] font-semibold text-stone-700 dark:text-zinc-200">
                   {formatFrequency(problem.Frequency)}
                 </span>
-                <span className="t-caption text-stone-400 dark:text-zinc-500">{frequencyLabel(problem.Frequency)} ·</span>
+                <span className="t-caption text-stone-500 dark:text-zinc-400">{frequencyLabel(problem.Frequency)} ·</span>
                 <span className="tnum text-[13px] font-semibold text-stone-700 dark:text-zinc-200">
                   {formatAcceptance(problem["Acceptance Rate"])}
                 </span>
-                <span className="t-caption text-stone-400 dark:text-zinc-500">accepted</span>
+                <span className="t-caption text-stone-500 dark:text-zinc-400">accepted</span>
               </div>
+              {compare && canCompare && (
+                <dl className="mt-2 grid grid-cols-2 gap-1">
+                  {compareCompanies.map((c) => {
+                    const raw = problem.Frequencies?.[c];
+                    return (
+                      <div key={c} className="flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-2 py-1.5 dark:bg-zinc-800/60">
+                        <dt className="t-caption truncate font-medium text-stone-500 dark:text-zinc-400" title={c}>{c}</dt>
+                        <dd className="tnum shrink-0 text-[13px] font-semibold text-stone-800 dark:text-zinc-100">
+                          {raw === undefined ? "—" : formatFrequency(raw)}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              )}
               {(multiCompany || coList.length > 1) && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {coList.slice(0, 3).map((c) => (
@@ -816,6 +936,19 @@ export default function ProblemTable({
                     Difficulty {sortIcon("Difficulty")}
                   </button>
                 </TableHead>
+                {compare && canCompare && compareCompanies.map((c) => (
+                  <TableHead key={c} className="text-right" aria-sort={ariaSort(freqField(c))}>
+                    <button
+                      type="button"
+                      onClick={(e) => handleSort(freqField(c), e.shiftKey)}
+                      aria-label={sortAriaLabel(`Sort by ${c} frequency. Shift-click to add as secondary sort.`, freqField(c))}
+                      title="Shift-click to add as secondary sort"
+                      className="t-th ml-auto flex max-w-28 items-center gap-1.5 py-2.5 text-stone-500 transition-colors hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    >
+                      <span className="truncate" title={c}>{c}</span> {sortIcon(freqField(c))}
+                    </button>
+                  </TableHead>
+                ))}
                 <TableHead className="text-right" aria-sort={ariaSort("Frequency")}>
                   <button
                     type="button"
@@ -889,11 +1022,25 @@ export default function ProblemTable({
                         {problem.Difficulty}
                       </Badge>
                     </TableCell>
+                    {compare && canCompare && compareCompanies.map((c) => {
+                      const raw = problem.Frequencies?.[c];
+                      return (
+                        <TableCell key={c} className="py-2.5 text-right">
+                          {raw === undefined ? (
+                            <span className="t-caption text-stone-300 dark:text-zinc-600" title={`Not tagged for ${c}`} aria-label={`Not tagged for ${c}`}>—</span>
+                          ) : (
+                            <span className="tnum text-[13px] font-semibold text-stone-900 dark:text-zinc-100">
+                              {formatFrequency(raw)}
+                            </span>
+                          )}
+                        </TableCell>
+                      );
+                    })}
                     <TableCell className="py-2.5 text-right">
                       <span className="tnum block text-[13px] font-semibold text-stone-900 dark:text-zinc-100">
                         {formatFrequency(problem.Frequency)}
                       </span>
-                      <span className="t-caption block text-stone-400 dark:text-zinc-500">
+                      <span className="t-caption block text-stone-500 dark:text-zinc-400">
                         {frequencyLabel(problem.Frequency)}
                       </span>
                     </TableCell>
@@ -913,7 +1060,7 @@ export default function ProblemTable({
                             </Badge>
                           ))}
                           {(problem.Topics ?? []).length > 6 && (
-                            <Badge variant="outline" title={(problem.Topics ?? []).join(", ")} className="t-caption px-1.5 py-0 font-medium text-stone-400 dark:text-zinc-500">
+                            <Badge variant="outline" title={(problem.Topics ?? []).join(", ")} className="t-caption px-1.5 py-0 font-medium text-stone-500 dark:text-zinc-400">
                               +{(problem.Topics ?? []).length - 6}
                             </Badge>
                           )}
@@ -921,7 +1068,7 @@ export default function ProblemTable({
                       )}
                     </TableCell>
                     <TableCell className="py-2.5">
-                      <Button variant="ghost" size="sm" asChild className="h-8 w-8 rounded-lg p-0 text-stone-400 hover:text-stone-900 dark:text-zinc-500 dark:hover:text-zinc-100" aria-label={`Open ${problem.Title} on LeetCode`}>
+                      <Button variant="ghost" size="sm" asChild className="h-8 w-8 rounded-lg p-0 text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100" aria-label={`Open ${problem.Title} on LeetCode`}>
                         <a href={problem.Link} target="_blank" rel="noopener noreferrer">
                           <ExternalLink className="h-4 w-4" aria-hidden />
                         </a>
@@ -1054,7 +1201,7 @@ export default function ProblemTable({
             </div>
             {totalPages > 5 && (
               <form onSubmit={submitJump} className="flex items-center gap-1.5">
-                <label htmlFor="jump-page" className="t-caption text-stone-400 dark:text-zinc-500">
+                <label htmlFor="jump-page" className="t-caption text-stone-500 dark:text-zinc-400">
                   Go to
                 </label>
                 <Input
@@ -1075,7 +1222,7 @@ export default function ProblemTable({
             <button
               type="button"
               onClick={goToTop}
-              className="t-caption inline-flex items-center gap-1 font-semibold text-stone-400 transition-colors hover:text-stone-700 dark:text-zinc-500 dark:hover:text-zinc-200"
+              className="t-caption inline-flex items-center gap-1 font-semibold text-stone-500 transition-colors hover:text-stone-700 dark:text-zinc-400 dark:hover:text-zinc-200"
             >
               <ArrowUpToLine className="h-3.5 w-3.5" aria-hidden />
               Top
@@ -1089,7 +1236,7 @@ export default function ProblemTable({
           className={cn("flex flex-col items-center border border-stone-200 bg-white px-6 py-14 text-center dark:border-zinc-800 dark:bg-zinc-900", cardRadius)}
         >
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 dark:bg-zinc-800" aria-hidden>
-            <Filter className="h-5 w-5 text-stone-400 dark:text-zinc-500" aria-hidden />
+            <Filter className="h-5 w-5 text-stone-500 dark:text-zinc-400" aria-hidden />
           </span>
           <h3 className="t-h2 mt-4 text-stone-900 dark:text-zinc-100">No matches</h3>
           <p className="t-small prose-measure mt-1.5 text-stone-600 dark:text-zinc-400">

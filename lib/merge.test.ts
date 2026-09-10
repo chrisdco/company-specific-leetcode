@@ -84,6 +84,16 @@ describe("mergeCompanyResults", () => {
     expect(problems[0]["Acceptance Rate"]).toBe("30%");
   });
 
+  it("records per-company frequencies for compare views", () => {
+    const g = problem({ Title: "X", Link: "https://leetcode.com/problems/x", Company: "Google", Frequency: "60" });
+    const m = problem({ Title: "X", Link: "https://leetcode.com/problems/x", Company: "Meta", Frequency: "100" });
+    const { problems } = mergeCompanyResults([
+      { company: "Google", problems: [g], source: "primary" },
+      { company: "Meta", problems: [m], source: "primary" },
+    ]);
+    expect(problems[0].Frequencies).toEqual({ Google: "60", Meta: "100" });
+  });
+
   it("reports mixed sources", () => {
     const a = problem({ Title: "X", Link: "https://leetcode.com/problems/x", Company: "A" });
     const { source } = mergeCompanyResults([

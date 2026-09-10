@@ -1,4 +1,5 @@
 import type { Problem } from "@/app/types/problem";
+import { frequencyValue } from "./format";
 
 export interface CompanyResult {
   company: string;
@@ -8,8 +9,8 @@ export interface CompanyResult {
 
 export type MergedSource = "primary" | "fallback" | "mixed";
 
-function freqValue(raw: unknown): number {
-  return parseFloat(String(raw ?? "").replace("%", "")) || 0;
+export function freqValue(raw: unknown): number {
+  return frequencyValue(String(raw ?? ""));
 }
 
 /**
@@ -34,12 +35,14 @@ export function mergeCompanyResults(results: CompanyResult[]): {
           ...p,
           Company: company,
           Companies: [company],
+          Frequencies: { [company]: p.Frequency },
           Topics: [...(p.Topics ?? [])],
         });
         continue;
       }
       const ef = freqValue(ex.Frequency);
       const pf = freqValue(p.Frequency);
+      ex.Frequencies = { ...(ex.Frequencies ?? {}), [company]: p.Frequency };
       if (pf > ef || (pf === ef && company < ex.Company)) {
         ex.Frequency = p.Frequency;
         ex.Difficulty = p.Difficulty;

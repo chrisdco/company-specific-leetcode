@@ -165,11 +165,15 @@
 }
 
 /*
- * Type scale — one job per role (Geist / Material / Butterick informed).
- * eyebrow: section kickers. display: page H1. h2: section titles.
- * body: multi-line reading (15px, 1.65, pretty wrap, ≤68ch).
- * small: dense UI text. caption: hints/meta (never below 12px, slate-500+).
- * mono: technical labels + numbers. tnum: tabular figures anywhere.
+ * Type scale — one job per role (Material / Butterick informed).
+ * eyebrow: 11px section kickers (the one sub-12px exception — always bold,
+ *   uppercase, widely tracked, never body copy). display: page H1.
+ * h2/h3: section + card titles. body: multi-line reading (15px, 1.65,
+ *   pretty wrap, ≤68ch). small: dense UI text. caption: hints/meta (12.5px,
+ *   stone-500+ only — AA floor for small text).
+ * mono: micro-labels only (source line, overlines, sort badges at 10-11px).
+ *   Data numerals use tnum (tabular Inter) instead — mono faces run too wide
+ *   for dense table cells. tnum: tabular figures anywhere.
  */
 @layer components {
   .t-eyebrow {

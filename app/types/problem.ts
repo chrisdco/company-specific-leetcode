@@ -8,4 +8,6 @@ export interface Problem {
     Topics: string[];
     /** Populated client-side when multiple companies are merged. */
     Companies?: string[];
+    /** Per-company raw frequencies (same keys as Companies). Powers compare view. */
+    Frequencies?: Record<string, string>;
 }

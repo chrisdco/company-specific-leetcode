@@ -129,12 +129,14 @@ export default function TopicMultiSelect({
         >
           <div className="relative border-b border-stone-100 p-2 dark:border-zinc-800">
             <Search
-              className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400 dark:text-zinc-500"
+              className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-500 dark:text-zinc-400"
               aria-hidden
             />
             <Input
               ref={searchRef}
               value={query}
+              role="combobox"
+              aria-expanded="true"
               onChange={(e) => {
                 setQuery(e.target.value);
               }}
@@ -158,6 +160,7 @@ export default function TopicMultiSelect({
               aria-label="Search topics"
               aria-controls={listId}
               aria-autocomplete="list"
+              aria-activedescendant={filtered.length > 0 ? `${listId}-opt-${Math.min(highlight, filtered.length - 1)}` : undefined}
               className="h-9 rounded-lg pl-8 text-base sm:text-sm"
             />
           </div>
@@ -178,7 +181,7 @@ export default function TopicMultiSelect({
                 const isSel = selected.includes(t);
                 const hot = i === highlight;
                 return (
-                  <li key={t} role="option" aria-selected={isSel}>
+                  <li key={t} id={`${listId}-opt-${i}`} role="option" aria-selected={isSel}>
                     <button
                       type="button"
                       data-idx={i}
@@ -204,7 +207,7 @@ export default function TopicMultiSelect({
           </ul>
           {selected.length > 0 && (
             <div className="flex items-center justify-between border-t border-stone-100 px-3 py-2 dark:border-zinc-800">
-              <span className="t-caption tnum text-stone-400 dark:text-zinc-500">
+              <span className="t-caption tnum text-stone-500 dark:text-zinc-400">
                 {selected.length} selected
               </span>
               <button

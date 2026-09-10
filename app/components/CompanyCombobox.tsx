@@ -94,14 +94,14 @@ export default function CompanyCombobox({
               </button>
             </span>
           ))}
-          <span className="t-caption self-center text-stone-400 dark:text-zinc-500">
+          <span className="t-caption self-center text-stone-500 dark:text-zinc-400">
             {selected.length}/{MAX_COMPANIES}
           </span>
         </div>
       )}
       <div className="relative">
         <Building2
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-zinc-500"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-zinc-400"
           aria-hidden
         />
         <Input
@@ -110,6 +110,7 @@ export default function CompanyCombobox({
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"
+          aria-activedescendant={open && filtered.length > 0 ? `${listId}-opt-${safeHighlight}` : undefined}
           aria-label={`Companies — type to search ${companies.length} companies, pick up to ${MAX_COMPANIES}`}
           placeholder={
             companies.length
@@ -155,7 +156,7 @@ export default function CompanyCombobox({
           className="h-10 rounded-lg pl-9 pr-9 text-base sm:text-sm"
         />
         <ChevronDown
-          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-zinc-500"
+          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-zinc-400"
           aria-hidden
         />
       </div>
@@ -177,7 +178,7 @@ export default function CompanyCombobox({
                 const isSel = selected.includes(c);
                 const active = i === safeHighlight;
                 return (
-                  <li key={c} role="option" aria-selected={isSel}>
+                  <li key={c} id={`${listId}-opt-${i}`} role="option" aria-selected={isSel}>
                     <button
                       type="button"
                       onMouseEnter={() => setHighlight(i)}
@@ -197,7 +198,7 @@ export default function CompanyCombobox({
             </ul>
           )}
           {companies.length > 120 && !query && (
-            <p className="t-caption border-t border-stone-100 px-4 py-2 text-stone-400 dark:border-zinc-800 dark:text-zinc-500">
+            <p className="t-caption border-t border-stone-100 px-4 py-2 text-stone-500 dark:border-zinc-800 dark:text-zinc-400">
               Showing first 100 — type to search all {companies.length}.
             </p>
           )}

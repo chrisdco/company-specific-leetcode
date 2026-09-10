@@ -44,8 +44,11 @@ const FALLBACK_RAW =
 
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_CSV_BYTES = 2_500_000; // 2.5MB safety cap
-const COMPANY_TTL_MS = 24 * 60 * 60 * 1000;
-const PROBLEMS_TTL_MS = 60 * 60 * 1000;
+// Company directories change rarely (new listings, renames) — a week is safe
+// and keeps cold starts cheap. Problem CSVs refresh with upstream's manual
+// updates (~monthly), so 6h stays honest while slashing repeat origin load.
+const COMPANY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PROBLEMS_TTL_MS = 6 * 60 * 60 * 1000;
 
 interface CacheEntry<T> {
   value: T;
@@ -71,6 +74,20 @@ function getCached<T>(key: string): T | null {
 }
 function setCached<T>(key: string, value: T, ttl: number) {
   cache().set(key, { value, expires: Date.now() + ttl });
+}
+
+// Coalesce concurrent identical fetches: without this, N simultaneous cold
+// starts (or one multi-company load) fire N duplicate upstream requests.
+// No env/token needed — purely a thundering-herd guard.
+const inflight = new Map<string, Promise<unknown>>();
+function dedup<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+  const p = fn().finally(() => {
+    if (inflight.get(key) === p) inflight.delete(key);
+  });
+  inflight.set(key, p);
+  return p;
 }
 
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
@@ -100,11 +117,13 @@ interface GitHubContent {
 }
 
 async function fetchDirNames(apiUrl: string): Promise<string[]> {
-  const res = await fetchWithTimeout(apiUrl);
-  if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-  const data = (await res.json()) as GitHubContent[];
-  if (!Array.isArray(data)) return [];
-  return data.filter((d) => d.type === "dir").map((d) => d.name);
+  return dedup(`dirs:${apiUrl}`, async () => {
+    const res = await fetchWithTimeout(apiUrl);
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const data = (await res.json()) as GitHubContent[];
+    if (!Array.isArray(data)) return [];
+    return data.filter((d) => d.type === "dir").map((d) => d.name);
+  });
 }
 
 /** strip to alphanumerics for fuzzy cross-source matching */
@@ -175,8 +194,7 @@ export function isValidLeetCodeLink(link: string): boolean {
   );
 }
 
-function normalizeTopics(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
+export function normalizeTopics(raw: unknown): string[] {  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
   const s = String(raw ?? "").trim();
   if (!s) return [];
   return s
@@ -234,17 +252,15 @@ export async function getUpstreamFreshness(): Promise<UpstreamFreshness> {
     return c?.committer?.date ?? c?.author?.date ?? null;
   };
   try {
+    const fetchLatest = (repo: string) =>
+      dedup(`commits:${repo}`, () =>
+        fetchWithTimeout(`https://api.github.com/repos/${repo}/commits?per_page=1`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      );
     const [p, f] = await Promise.all([
-      fetchWithTimeout(
-        "https://api.github.com/repos/liquidslr/leetcode-company-wise-problems/commits?per_page=1"
-      )
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-      fetchWithTimeout(
-        "https://api.github.com/repos/snehasishroy/leetcode-companywise-interview-questions/commits?per_page=1"
-      )
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
+      fetchLatest("liquidslr/leetcode-company-wise-problems"),
+      fetchLatest("snehasishroy/leetcode-companywise-interview-questions"),
     ]);
     const result = { primary: pick(p), fallback: pick(f) };
     setCached("upstream-freshness", result, COMPANY_TTL_MS);
@@ -289,7 +305,7 @@ async function fetchCsvText(url: string): Promise<string> {
   return text;
 }
 
-function parsePrimaryCsv(csv: string, company: string): Problem[] {
+export function parsePrimaryCsv(csv: string, company: string): Problem[] {
   const records = parse(csv, {
     columns: true,
     skip_empty_lines: true,
@@ -313,7 +329,7 @@ function parsePrimaryCsv(csv: string, company: string): Problem[] {
   return out;
 }
 
-function parseFallbackCsv(csv: string, company: string): Problem[] {
+export function parseFallbackCsv(csv: string, company: string): Problem[] {
   const records = parse(csv, {
     columns: true,
     skip_empty_lines: true,

@@ -5,6 +5,9 @@ import {
   normalizeDifficulty,
   normalizeFrequency,
   normalizeKey,
+  normalizeTopics,
+  parseFallbackCsv,
+  parsePrimaryCsv,
   prettifySlug,
   toFallbackSlug,
 } from "./sources";
@@ -72,6 +75,46 @@ describe("slug helpers", () => {
   it("prettifySlug title-cases", () => {
     expect(prettifySlug("aqr-capital-management")).toBe("Aqr Capital Management");
     expect(prettifySlug("jpmorgan")).toBe("Jpmorgan");
+  });
+});
+
+describe("normalizeTopics", () => {
+  it("splits comma- and semicolon-separated lists", () => {
+    expect(normalizeTopics("Array, Hash Table")).toEqual(["Array", "Hash Table"]);
+    expect(normalizeTopics("Array;Hash Table")).toEqual(["Array", "Hash Table"]);
+    expect(normalizeTopics("")).toEqual([]);
+  });
+});
+
+describe("parsePrimaryCsv", () => {
+  const csv = [
+    "Difficulty,Title,Frequency,Acceptance Rate,Link,Topics",
+    'EASY,Two Sum,100.0,0.0058,https://leetcode.com/problems/two-sum,"Array, Hash Table"',
+    "MEDIUM,,50,0.5,https://leetcode.com/problems/x,Array",
+    "MEDIUM,Bad Link,50,0.5,https://example.com/x,Array",
+  ].join("\n");
+
+  it("parses valid rows and drops bad ones", () => {
+    const rows = parsePrimaryCsv(csv, "Google");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].Title).toBe("Two Sum");
+    expect(rows[0].Difficulty).toBe("Easy");
+    expect(rows[0].Topics).toEqual(["Array", "Hash Table"]);
+  });
+});
+
+describe("parseFallbackCsv", () => {
+  const csv = [
+    "ID,URL,Title,Difficulty,Acceptance %,Frequency %",
+    "1,https://leetcode.com/problems/two-sum,Two Sum,Easy,57.8%,100.0%",
+  ].join("\n");
+
+  it("maps URL/percent columns and leaves topics empty", () => {
+    const rows = parseFallbackCsv(csv, "Google");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].Link).toBe("https://leetcode.com/problems/two-sum");
+    expect(rows[0]["Acceptance Rate"]).toBe("57.8%");
+    expect(rows[0].Topics).toEqual([]);
   });
 });
 

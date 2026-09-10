@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProblemTable from "./components/ProblemTable";
 import CompanyCombobox, { MAX_COMPANIES } from "./components/CompanyCombobox";
 import ThemeToggle from "./components/ThemeToggle";
@@ -49,7 +49,120 @@ type ProblemsPayload = {
 };
 
 const RECENT_KEY = "csl-recent-companies-v1";
+/** Single-slot cache of the last successful result set (best-effort, quota-guarded). */
+const LAST_RESULTS_KEY = "csl-last-results-v1";
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_MAX_BYTES = 2_000_000;
 const VALID_THEMES: ThemeName[] = ["clean", "dark", "panda"];
+
+interface LoadOk {
+  company: string;
+  problems: Problem[];
+  source: "primary" | "fallback";
+}
+
+function resultKey(selected: string[], time: string): string {
+  return [...selected].sort().join("|") + "#" + time;
+}
+
+/** One idempotent GET per company; callers decide what to do with failures. */
+async function loadCompanies(
+  companies: string[],
+  effTime: string,
+  onTick?: () => void
+): Promise<{ ok: LoadOk[]; failed: string[] }> {
+  const wrapped = companies.map((company) =>
+    (async (): Promise<LoadOk> => {
+      try {
+        const res = await fetch(
+          `/api/getProblems/${encodeURIComponent(company)}/${encodeURIComponent(effTime)}`
+        );
+        const data = (await res.json()) as Partial<ProblemsPayload> & { error?: string; problems?: Problem[] };
+        if (!res.ok) throw new Error(data.error || `Failed for ${company}`);
+        const list = Array.isArray(data) ? (data as unknown as Problem[]) : data.problems ?? [];
+        const src = (data as Partial<ProblemsPayload>).source ?? "primary";
+        return { company, problems: list, source: src as "primary" | "fallback" };
+      } finally {
+        onTick?.();
+      }
+    })()
+  );
+  const settled = await Promise.allSettled(wrapped);
+  const ok = settled
+    .filter((r): r is PromiseFulfilledResult<LoadOk> => r.status === "fulfilled")
+    .map((r) => r.value);
+  const failed = companies.filter((_, i) => settled[i].status === "rejected");
+  return { ok, failed };
+}
+
+function persistResults(snapshot: { selected: string[]; time: string }, ok: LoadOk[]): void {
+  try {
+    const payload = JSON.stringify({
+      key: resultKey(snapshot.selected, snapshot.time),
+      snapshot,
+      ok,
+      at: Date.now(),
+    });
+    if (payload.length > CACHE_MAX_BYTES) return;
+    localStorage.setItem(LAST_RESULTS_KEY, payload);
+  } catch {
+    /* quota or privacy mode — the cache is best-effort */
+  }
+}
+
+interface CachedResults {
+  problems: Problem[];
+  source: SourceKind;
+  snapshot: { selected: string[]; time: string };
+  ok: LoadOk[];
+  at: number;
+}
+
+/**
+ * Synchronous cache read for the lazy state initializers below. Hydrating
+ * inside an effect would flash the empty state on every cache-hit visit; the
+ * documented React pattern for persisted UI state is a lazy initializer.
+ * Prerender has no window/storage, so the server always renders defaults and
+ * the hydrated client takes over — correct UI in prod, dev-only warning worst
+ * case on cache-hit loads.
+ */
+function readCachedResults(): CachedResults | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LAST_RESULTS_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as {
+      key?: string;
+      snapshot?: { selected: string[]; time: string };
+      ok?: LoadOk[];
+      at?: number;
+    };
+    const sp = new URLSearchParams(window.location.search);
+    if (!sp.get("company") || !cached || typeof cached.at !== "number") return null;
+    if (Date.now() - cached.at > CACHE_TTL_MS) return null;
+    const sel = sp.getAll("company").filter(Boolean).slice(0, MAX_COMPANIES);
+    const tm = sp.get("time");
+    const validTime = tm && (TIME_OPTIONS as readonly string[]).includes(tm) ? tm : "All";
+    if (
+      cached.key !== resultKey(sel, validTime) ||
+      !Array.isArray(cached.ok) ||
+      cached.ok.length === 0 ||
+      !cached.snapshot
+    ) {
+      return null;
+    }
+    const { problems: merged, source: src } = mergeCompanyResults(cached.ok);
+    return {
+      problems: merged,
+      source: src,
+      snapshot: { selected: sel, time: validTime },
+      ok: cached.ok,
+      at: cached.at,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function loadRecent(): string[] {
   if (typeof window === "undefined") return [];
@@ -147,15 +260,18 @@ export default function Home() {
     const tm = readUrlParams()?.get("time");
     return tm && (TIME_OPTIONS as readonly string[]).includes(tm) ? tm : "All";
   });
-  const [problems, setProblems] = useState<Problem[]>([]);
-  const [source, setSource] = useState<SourceKind>("primary");
-  const [hasSearched, setHasSearched] = useState(false);
+  const [initialCache] = useState(readCachedResults);
+  const [problems, setProblems] = useState<Problem[]>(() => initialCache?.problems ?? []);
+  const [source, setSource] = useState<SourceKind>(() => initialCache?.source ?? "primary");
+  const [hasSearched, setHasSearched] = useState(() => initialCache !== null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState("");
   const [partialWarning, setPartialWarning] = useState("");
   const [focusTop30, setFocusTop30] = useState(false);
-  const [lastFetched, setLastFetched] = useState<{ selected: string[]; time: string } | null>(null);
+  const [lastFetched, setLastFetched] = useState<{ selected: string[]; time: string } | null>(
+    () => initialCache?.snapshot ?? null
+  );
   const [freshness, setFreshness] = useState<{ primary: string | null; fallback: string | null } | null>(null);
 
   const t = theme === "panda" ? pandaTheme : theme === "dark" ? darkTheme : cleanTheme;
@@ -183,86 +299,103 @@ export default function Home() {
     } catch { /* ignore */ }
   }, [selected, time, theme]);
 
-  useEffect(() => {
-    async function fetchCompanies() {
-      setCompaniesLoading(true);
-      setCompaniesError("");
-      try {
-        const res = await fetch("/api/getCompanies");
-        if (!res.ok) throw new Error(`Server ${res.status}`);
-        const data = await res.json();
-        const list: string[] = Array.isArray(data) ? data : data.companies ?? [];
-        if (list.length === 0) throw new Error("Empty company list");
-        const sorted = [...list].sort((a, b) => a.localeCompare(b));
-        setCompanies(sorted);
-        setSelected((prev) => {
-          if (prev.length > 0) return prev.filter((c) => sorted.includes(c));
-          const sp = new URLSearchParams(window.location.search);
-          const fromUrl = sp.getAll("company").filter((c) => sorted.includes(c)).slice(0, MAX_COMPANIES);
-          if (fromUrl.length > 0) return fromUrl;
-          return sorted.includes("Google") ? ["Google"] : sorted.slice(0, 1);
-        });
-        if (!Array.isArray(data) && (data.primaryCount || data.fallbackCount)) {
-          setCompanyMeta(`${sorted.length} companies · primary ${data.primaryCount} + fallback ${data.fallbackCount}`);
-        } else {
-          setCompanyMeta(`${sorted.length} companies`);
-        }
-        if (!Array.isArray(data) && data.dataAsOf) {
-          setFreshness(data.dataAsOf);
-        }
-      } catch (e) {
-        console.error("Failed to fetch companies:", e);
-        setCompaniesError(
-          "Couldn't load the company list (upstream rate limit or network). Please wait a minute and reload."
-        );
-      } finally {
-        setCompaniesLoading(false);
+  // Company list loader, hoisted so the error panel can retry it in place
+  // (a full page reload would wipe the user's in-progress selection).
+  const loadCompanyList = useCallback(async () => {
+    setCompaniesLoading(true);
+    setCompaniesError("");
+    try {
+      const res = await fetch("/api/getCompanies");
+      if (!res.ok) throw new Error(`Server ${res.status}`);
+      const data = await res.json();
+      const list: string[] = Array.isArray(data) ? data : data.companies ?? [];
+      if (list.length === 0) throw new Error("Empty company list");
+      const sorted = [...list].sort((a, b) => a.localeCompare(b));
+      setCompanies(sorted);
+      setSelected((prev) => {
+        if (prev.length > 0) return prev.filter((c) => sorted.includes(c));
+        const sp = new URLSearchParams(window.location.search);
+        const fromUrl = sp.getAll("company").filter((c) => sorted.includes(c)).slice(0, MAX_COMPANIES);
+        if (fromUrl.length > 0) return fromUrl;
+        return sorted.includes("Google") ? ["Google"] : sorted.slice(0, 1);
+      });
+      if (!Array.isArray(data) && (data.primaryCount || data.fallbackCount)) {
+        setCompanyMeta(`${sorted.length} companies · primary ${data.primaryCount} + fallback ${data.fallbackCount}`);
+      } else {
+        setCompanyMeta(`${sorted.length} companies`);
       }
+      if (!Array.isArray(data) && data.dataAsOf) {
+        setFreshness(data.dataAsOf);
+      }
+    } catch (e) {
+      console.error("Failed to fetch companies:", e);
+      setCompaniesError(
+        "Couldn't load the company list (upstream rate limit or network). Please wait a minute and retry."
+      );
+    } finally {
+      setCompaniesLoading(false);
     }
-    fetchCompanies();
   }, []);
 
-  const fetchProblems = useCallback(async () => {
-    if (selected.length === 0) return;
-    const snapshot = { selected: [...selected], time };
-    setLoading(true);
-    setProgress({ done: 0, total: selected.length });
-    setError("");
-    setPartialWarning("");
-    setHasSearched(true);
-    try {
-      // Each request bumps the counter as it settles — the button reads "Loading 2/3…"
-      const wrapped = snapshot.selected.map((company) =>
-        (async () => {
-          try {
-            const res = await fetch(
-              `/api/getProblems/${encodeURIComponent(company)}/${encodeURIComponent(snapshot.time)}`
-            );
-            const data = (await res.json()) as Partial<ProblemsPayload> & { error?: string; problems?: Problem[] };
-            if (!res.ok) throw new Error(data.error || `Failed for ${company}`);
-            const list = Array.isArray(data) ? (data as unknown as Problem[]) : data.problems ?? [];
-            const src = (data as Partial<ProblemsPayload>).source ?? "primary";
-            return { company, problems: list, source: src as "primary" | "fallback" };
-          } finally {
-            setProgress((p) => (p ? { ...p, done: Math.min(p.done + 1, p.total) } : p));
-          }
-        })()
-      );
-      const settled = await Promise.allSettled(wrapped);
-      const ok = settled
-        .filter((r): r is PromiseFulfilledResult<{ company: string; problems: Problem[]; source: "primary" | "fallback" }> => r.status === "fulfilled")
-        .map((r) => r.value);
-      const failed = settled.length - ok.length;
-      if (ok.length === 0) throw new Error("All company requests failed. Please try again.");
+  // Initial company load, deferred a tick so first paint lands before the
+  // fetch (and its state updates) cascade off this effect.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void loadCompanyList();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [loadCompanyList]);
+
+  const lastResultsRef = useRef<LoadOk[]>(initialCache?.ok ?? []);
+  const autoloaded = useRef(false);
+  const [failedCompanies, setFailedCompanies] = useState<string[]>([]);
+  const [cacheNote, setCacheNote] = useState<number | null>(() => initialCache?.at ?? null);
+
+  /** Commit one load outcome to every piece of result state (single funnel).
+      Memoized on no inputs — it only calls stable setters and module fns. */
+  const applyResults = useCallback(
+    (
+      snapshot: { selected: string[]; time: string },
+      ok: LoadOk[],
+      failed: string[]
+    ) => {
       const { problems: merged, source: src } = mergeCompanyResults(ok);
       setProblems(merged);
       setSource(src);
       setLastFetched(snapshot);
-      if (failed > 0) {
+      lastResultsRef.current = ok;
+      setFailedCompanies(failed);
+      if (failed.length > 0) {
         setPartialWarning(
-          `${failed} of ${settled.length} ${failed === 1 ? "company" : "companies"} failed to load — showing partial results.`
+          `${failed.length} of ${snapshot.selected.length} ${failed.length === 1 ? "company" : "companies"} failed to load — showing partial results.`
         );
+      } else {
+        setPartialWarning("");
       }
+      persistResults(snapshot, ok);
+    },
+    []
+  );
+
+  const fetchProblems = useCallback(async (timeOverride?: string) => {
+    if (selected.length === 0) return;
+    const effTime = timeOverride ?? time;
+    if (effTime !== time) setTime(effTime);
+    const snapshot = { selected: [...selected], time: effTime };
+    setLoading(true);
+    setProgress({ done: 0, total: snapshot.selected.length });
+    setError("");
+    setPartialWarning("");
+    setFailedCompanies([]);
+    setCacheNote(null);
+    setHasSearched(true);
+    try {
+      // Each request bumps the counter as it settles — the button reads "Loading 2/3…"
+      const { ok, failed } = await loadCompanies(snapshot.selected, effTime, () =>
+        setProgress((p) => (p ? { ...p, done: Math.min(p.done + 1, p.total) } : p))
+      );
+      if (ok.length === 0) throw new Error("All company requests failed. Please try again.");
+      applyResults(snapshot, ok, failed);
       // recents (most-recent first, max 6)
       setRecent((prev) => {
         const next = [...snapshot.selected, ...prev.filter((c) => !snapshot.selected.includes(c))].slice(0, 6);
@@ -278,15 +411,47 @@ export default function Home() {
       setLoading(false);
       setProgress(null);
     }
-  }, [selected, time]);
+  }, [selected, time, applyResults]);
 
-  // auto-run once when arriving via shared link. Deferred past commit so the
-  // fetch (and its state updates) don't cascade synchronously off this effect.
+  /** Retry only the companies that failed, merging into the current results. */
+  const retryable = failedCompanies.filter((c) => selected.includes(c));
+
+  const retryFailed = useCallback(async () => {
+    if (retryable.length === 0 || loading) return;
+    const effTime = lastFetched?.time ?? time;
+    setLoading(true);
+    setProgress({ done: 0, total: retryable.length });
+    setError("");
+    try {
+      const { ok, failed } = await loadCompanies(retryable, effTime, () =>
+        setProgress((p) => (p ? { ...p, done: Math.min(p.done + 1, p.total) } : p))
+      );
+      const base = lastResultsRef.current.filter(
+        (r) => selected.includes(r.company) && !retryable.includes(r.company)
+      );
+      const combined = [...base, ...ok];
+      if (combined.length === 0) {
+        setPartialWarning("Retry failed — still showing the earlier partial results.");
+        setFailedCompanies(retryable);
+        return;
+      }
+      applyResults({ selected: [...selected], time: effTime }, combined, failed);
+    } finally {
+      setLoading(false);
+      setProgress(null);
+    }
+  }, [retryable, loading, selected, lastFetched, time, applyResults]);
+
+  // auto-run when arriving via shared link. Deferred past commit so the fetch
+  // (and its state updates) don't cascade synchronously off this effect, and
+  // guarded by a ref so it provably fires once no matter how deps evolve.
   useEffect(() => {
+    if (autoloaded.current) return;
     let cancelled = false;
     try {
       const sp = new URLSearchParams(window.location.search);
-      if (sp.get("company") && sp.get("autoload") !== "0" && companies.length > 0 && !hasSearched && !loading) {
+      if (sp.get("company") && sp.get("autoload") !== "0" && companies.length > 0 && !loading) {
+        autoloaded.current = true;
         const t = setTimeout(() => {
           if (!cancelled) void fetchProblems();
         }, 0);
@@ -427,9 +592,9 @@ export default function Home() {
               <div className="space-y-1.5">
                 <label htmlFor="company-search" className="t-small flex items-center gap-1.5 font-semibold text-stone-700 dark:text-zinc-300" style={isPanda ? { color: t.text } : undefined}>
                   <Step n={1} />
-                  <Building2 className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
+                  <Building2 className="h-3.5 w-3.5 text-stone-500 dark:text-zinc-400" aria-hidden />
                   Companies
-                  <span className="font-normal text-stone-400 dark:text-zinc-500">· up to {MAX_COMPANIES}</span>
+                  <span className="font-normal text-stone-500 dark:text-zinc-400">· up to {MAX_COMPANIES}</span>
                 </label>
                 <CompanyCombobox
                   companies={companies}
@@ -442,7 +607,7 @@ export default function Home() {
                 </p>
                 {recentSuggestions.length > 0 && !companiesLoading && (
                   <p className="t-caption flex flex-wrap items-center gap-1.5 text-stone-500 dark:text-zinc-400">
-                    <History className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
+                    <History className="h-3.5 w-3.5 text-stone-500 dark:text-zinc-400" aria-hidden />
                     Recent:
                     {recentSuggestions.map((c) => (
                       <button
@@ -464,7 +629,7 @@ export default function Home() {
               <div className="space-y-1.5">
                 <label htmlFor="time-select" className="t-small flex items-center gap-1.5 font-semibold text-stone-700 dark:text-zinc-300" style={isPanda ? { color: t.text } : undefined}>
                   <Step n={2} />
-                  <Clock className="h-3.5 w-3.5 text-stone-400 dark:text-zinc-500" aria-hidden />
+                  <Clock className="h-3.5 w-3.5 text-stone-500 dark:text-zinc-400" aria-hidden />
                   Time period
                 </label>
                 <Select value={time} onValueChange={setTime}>
@@ -486,7 +651,7 @@ export default function Home() {
 
               <div className="flex flex-col justify-end gap-2 self-stretch lg:pt-[26px]">
                 <Button
-                  onClick={fetchProblems}
+                  onClick={() => void fetchProblems()}
                   disabled={loading || selected.length === 0 || !!companiesError}
                   aria-live="polite"
                   className="h-10 rounded-lg px-5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow disabled:opacity-50 dark:text-zinc-950"
@@ -514,7 +679,7 @@ export default function Home() {
                 <p className="t-caption flex min-h-5 items-center gap-1.5" aria-live="polite">
                   {loading ? (
                     <>
-                      <Loader2 className="h-3 w-3 animate-spin text-stone-400" aria-hidden />
+                      <Loader2 className="h-3 w-3 animate-spin text-stone-500 dark:text-zinc-400" aria-hidden />
                       <span className="text-stone-500 dark:text-zinc-400">
                         Fetching{progress && progress.total > 1 ? ` company ${Math.min(progress.done + 1, progress.total)} of ${progress.total}` : ""}…
                       </span>
@@ -541,7 +706,7 @@ export default function Home() {
                   ) : hasSearched && problems.length > 0 ? (
                     <>
                       <StatusDot tone="emerald" />
-                      <span className="text-stone-400 dark:text-zinc-500">Results are up to date.</span>
+                      <span className="text-stone-500 dark:text-zinc-400">Results are up to date.</span>
                     </>
                   ) : null}
                 </p>
@@ -574,8 +739,8 @@ export default function Home() {
                 <div className="text-sm">
                   <p className="font-semibold text-red-700 dark:text-red-300">Company list failed to load</p>
                   <p className="mt-0.5 text-red-600 dark:text-red-400">{companiesError}</p>
-                  <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
-                    Reload
+                  <Button variant="outline" size="sm" className="mt-2" onClick={() => void loadCompanyList()}>
+                    Retry
                   </Button>
                 </div>
               </div>
@@ -586,20 +751,33 @@ export default function Home() {
               </div>
             )}
             {partialWarning && !error && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/40" role="status">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/40" role="status">
                 <p className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
-                  <TriangleAlert className="h-4 w-4" aria-hidden />
+                  <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
                   {partialWarning}
                 </p>
+                {!stale && !loading && retryable.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void retryFailed()}
+                    className="h-8 rounded-lg border-amber-300 bg-white/60 text-[13px] font-semibold text-amber-800 hover:bg-white dark:border-amber-800 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-950"
+                  >
+                    Retry {retryable.length} failed
+                  </Button>
+                )}
               </div>
             )}
           </section>
 
           {/* Muted data-source line — mono caption, recedes by design */}
           {hasSearched && problems.length > 0 && (
-            <p className="t-mono mt-3 text-[11.5px] text-stone-400 dark:text-zinc-500" aria-live="polite">
+            <p className="t-mono mt-3 text-[11.5px] text-stone-500 dark:text-zinc-400" aria-live="polite">
               {sourceLabel}
               {"  ·  "}{selected.join(" + ")} · {time}{focusTop30 ? " · top 30" : ""} · n={problems.length}
+              {cacheNote !== null && !loading
+                ? ` · showing cached results while refreshing`
+                : null}
               {(() => {
                 const iso =
                   source === "primary"
@@ -613,16 +791,56 @@ export default function Home() {
             </p>
           )}
 
-          {/* Results */}
+          {/* Results — a distinct empty state when a search returns nothing,
+              so "no data" never reads as "you haven't clicked yet" */}
           <div className="mt-4">
-            <ProblemTable
-              problems={visibleProblems}
-              theme={theme}
-              fallbackUsed={source !== "primary"}
-              loading={loading}
-              companyLabel={selected.join(" + ")}
-              timeLabel={time}
-            />
+            {hasSearched && !loading && !error && problems.length === 0 ? (
+              <div
+                className={cn("border px-6 py-14 text-center shadow-sm", isPanda ? "rounded-3xl" : "rounded-xl")}
+                style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}
+                role="status"
+              >
+                <p className="t-eyebrow" style={{ color: "var(--accent)" }}>
+                  No data for this selection
+                </p>
+                <h2 className="t-h2 mt-2" style={{ color: "var(--text)" }}>
+                  No questions found for {selected.join(" + ") || "these companies"} · {time}
+                </h2>
+                <p className="t-small prose-measure mx-auto mt-2" style={{ color: "var(--muted)" }}>
+                  Coverage is thinnest for small companies and short time windows, and the
+                  fallback dataset skips some names entirely. Widening the window is the
+                  fastest fix.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {time !== "All" && (
+                    <Button
+                      onClick={() => void fetchProblems("All")}
+                      className="h-10 rounded-lg px-5 text-sm font-semibold shadow-sm"
+                      style={{ backgroundColor: t.buttonBg, color: t.buttonText }}
+                    >
+                      <Search className="h-4 w-4" aria-hidden />
+                      Try the “All” window
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => document.getElementById("controls")?.scrollIntoView({ behavior: "smooth" })}
+                    className="h-10 rounded-lg px-4 text-sm font-semibold"
+                  >
+                    Change selection
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <ProblemTable
+                problems={visibleProblems}
+                theme={theme}
+                fallbackUsed={source !== "primary"}
+                loading={loading}
+                companyLabel={selected.join(" + ")}
+                timeLabel={time}
+              />
+            )}
           </div>
 
           <StudyGuides />
@@ -636,7 +854,7 @@ export default function Home() {
               user-reported LeetCode Premium data — noisy for small companies. Acceptance rates are
               repaired from upstream scale errors; treat as rough.
             </p>
-            <p className="t-caption mt-2 flex flex-wrap items-center gap-x-2 text-stone-400 dark:text-zinc-500">
+            <p className="t-caption mt-2 flex flex-wrap items-center gap-x-2 text-stone-500 dark:text-zinc-400">
               <span className="inline-flex items-center gap-1">
                 {isPanda ? <Panda className="h-3 w-3" aria-hidden /> : null}
                 Sources: liquidslr (primary) · snehasishroy July 2026 snapshot (fallback)

@@ -38,7 +38,7 @@ export default function ThemeToggle({
               "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
               active
                 ? "text-white shadow-sm dark:text-zinc-950"
-                : "text-stone-400 hover:bg-stone-100 hover:text-stone-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                : "text-stone-500 hover:bg-stone-100 hover:text-stone-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
             )}
             style={active ? { backgroundColor: "var(--accent)" } : undefined}
           >
