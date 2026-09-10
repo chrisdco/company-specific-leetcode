@@ -34,7 +34,7 @@ const FALLBACK_RAW =
 
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_CSV_BYTES = 2_500_000; // 2.5MB safety cap
-// Company directories change rarely (new listings, renames) — a week is safe
+// Company directories change rarely (new listings, renames) - a week is safe
 // and keeps cold starts cheap. Problem CSVs refresh with upstream's manual
 // updates (~monthly), so 6h stays honest while slashing repeat origin load.
 const COMPANY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -68,7 +68,7 @@ function setCached<T>(key: string, value: T, ttl: number) {
 
 // Coalesce concurrent identical fetches: without this, N simultaneous cold
 // starts (or one multi-company load) fire N duplicate upstream requests.
-// No env/token needed — purely a thundering-herd guard.
+// No env/token needed - purely a thundering-herd guard.
 const inflight = new Map<string, Promise<unknown>>();
 function dedup<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const existing = inflight.get(key) as Promise<T> | undefined;
@@ -138,7 +138,7 @@ function parseRetryAfter(res: Response): number | null {
 function toRateLimitedError(res: Response): RateLimitedError {
   const secs = parseRetryAfter(res);
   const when =
-    secs !== null && secs > 0 ? ` — retry in ~${Math.ceil(secs / 60)} min` : "";
+    secs !== null && secs > 0 ? ` (retry in ~${Math.ceil(secs / 60)} min)` : "";
   return new RateLimitedError(`GitHub API rate limit reached${when}.`, {
     status: res.status,
     retryAfterSecs: secs,
@@ -151,7 +151,7 @@ interface ETagEntry {
 }
 
 // ETag store for conditional requests. Revalidated api.github.com responses
-// come back 304 and cost ZERO quota (vs 1 call per 200) — the cheapest
+// come back 304 and cost ZERO quota (vs 1 call per 200) - the cheapest
 // rate-limit insurance available without credentials or shared storage.
 const etagCache = new Map<string, ETagEntry>();
 

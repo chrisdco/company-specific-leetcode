@@ -19,7 +19,7 @@ const jbMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://panda-leetcode.vercel.app"),
   title: {
-    default: "Company LeetCode Lists — Targeted Interview Prep",
+    default: "Company LeetCode Lists: Targeted Interview Prep",
     template: "%s · Company LeetCode Lists",
   },
   description: "Filter 700+ companies by recency and frequency. Learn patterns with Blind 75 / NeetCode 150 first, then target the top 30 company-tagged LeetCode problems.",

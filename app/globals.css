@@ -133,7 +133,7 @@
     font-feature-settings: "cv11", "ss01";
   }
 
-  /* Visible, subtle scrollbars (accessibility fix — never hide them globally) */
+  /* Visible, subtle scrollbars (accessibility fix - never hide them globally) */
   * {
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
@@ -158,6 +158,25 @@
     border-radius: 4px;
   }
 
+  /* One-paint theme switches: kills the full-tree color crossfade that made
+     toggles feel stuck. Added + removed around the state flip in JS. */
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* Applied to <html> for one paint around theme switches: without this,
+     every transition in the tree cross-fades at once and the switch feels
+     stuck. Removed on the next frames + a timeout fallback. */
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+
   ::selection {
     /* Accent-tinted per theme (falls back to clean indigo outside the app root). */
     background: color-mix(in srgb, var(--accent, #4f46e5) 24%, transparent);
@@ -165,14 +184,14 @@
 }
 
 /*
- * Type scale — one job per role (Material / Butterick informed).
- * eyebrow: 11px section kickers (the one sub-12px exception — always bold,
+ * Type scale - one job per role (Material / Butterick informed).
+ * eyebrow: 11px section kickers (the one sub-12px exception - always bold,
  *   uppercase, widely tracked, never body copy). display: page H1.
  * h2/h3: section + card titles. body: multi-line reading (15px, 1.65,
  *   pretty wrap, ≤68ch). small: dense UI text. caption: hints/meta (12.5px,
- *   stone-500+ only — AA floor for small text).
+ *   stone-500+ only - AA floor for small text).
  * mono: micro-labels only (source line, overlines, sort badges at 10-11px).
- *   Data numerals use tnum (tabular Inter) instead — mono faces run too wide
+ *   Data numerals use tnum (tabular Inter) instead - mono faces run too wide
  *   for dense table cells. tnum: tabular figures anywhere.
  */
 @layer components {
@@ -238,7 +257,7 @@
   }
 }
 
-/* Panda tribute float animations — calm, sparse, motion-safe */
+/* Panda tribute float animations - calm, sparse, motion-safe */
 @layer components {
   @keyframes floatPanda1 {
     0% { transform: translateX(-100px) translateY(0) rotate(0deg); opacity: 0; }

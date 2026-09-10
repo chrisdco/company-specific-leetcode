@@ -4,7 +4,7 @@
  * scale repairs in case a legacy/cached payload slips through, then format.
  */
 
-/** Round to 0.1 — doubles as float hygiene (0.0058*100*100 would
+/** Round to 0.1 - doubles as float hygiene (0.0058*100*100 would
  *  otherwise compare as 57.99999999999999 instead of 58). */
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -42,7 +42,7 @@ export function formatAcceptance(raw: string): string {
   return `${Math.round(n * 10) / 10}%`;
 }
 
-// Editorial bands for the current result set only — upstream "frequency" is a
+// Editorial bands for the current result set only - upstream "frequency" is a
 // per-company relative score (100 = that company's most-tagged problem), not
 // a statistic. Kept stable so returning users can rely on the vocabulary.
 export function frequencyLabel(raw: string): string {

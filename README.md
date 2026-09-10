@@ -5,9 +5,11 @@ frequency, and prep against what they actually ask.
 
 ### **[Try it live →](https://panda-leetcode.vercel.app)**
 
+![Company LeetCode Lists preview](docs/preview.png)
+
 - 🎯 Company-tagged questions across **700+ companies**, with real data-freshness dates
 - 📊 Sortable frequency + acceptance stats, topic filters, per-company compare view
-- 🌓 Light / Dark / Panda themes — every view is a shareable link
+- 🌓 Light / Dark / Panda themes. Every view is a shareable link.
 - ✅ Solved tracking, Top-30 focus mode, one-click CSV export
 
 > Frequency means "how often this is tagged for *that* company" (100 = its most-asked),
@@ -28,4 +30,4 @@ bun run build                   # production build (Next 16 + Turbopack)
 - Key files: `app/page.tsx` (controls + state) · `app/components/ProblemTable.tsx`
   (table, filters, sorting) · `lib/merge.ts` (multi-company merge) · `lib/theme.ts`.
 
-Forks and PRs welcome — please keep `bun run build` green.
+Forks and PRs welcome. Please keep `bun run build` green.

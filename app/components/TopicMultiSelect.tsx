@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /**
- * Searchable multi-select for topics — mirrors the company picker idiom:
+ * Searchable multi-select for topics - mirrors the company picker idiom:
  * type to narrow, toggle to select, chips/pills show what's active.
  */
 export default function TopicMultiSelect({

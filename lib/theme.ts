@@ -18,13 +18,13 @@ export interface ThemeTokens {
 export const cleanTheme: ThemeTokens = {
   name: "clean",
   label: "Light",
-  pageBg: "#e8e6e1", // deeper warm paper — white cards sit *in* it, less glare
+  pageBg: "#e8e6e1", // deeper warm paper - white cards sit *in* it, less glare
   headerBg: "#f1efe9",
   cardBg: "#ffffff",
   cardBorder: "#e7e5e4", // stone-200
   text: "#1c1917", // stone-900
-  muted: "#57534e", // stone-600 — passes AA where slate-400/500 hints failed
-  accent: "#4f46e5", // indigo-600 — single brand accent
+  muted: "#57534e", // stone-600 - passes AA where slate-400/500 hints failed
+  accent: "#4f46e5", // indigo-600 - single brand accent
   accentSoft: "#eef2ff", // indigo-50
   buttonBg: "#18181b", // zinc-900 near-black primary (Vercel/Linear idiom)
   buttonText: "#ffffff",
@@ -38,8 +38,8 @@ export const darkTheme: ThemeTokens = {
   cardBg: "#141417",
   cardBorder: "#26262b",
   text: "#f4f4f5", // zinc-100
-  muted: "#a1a1aa", // zinc-400 — AA on dark surfaces
-  accent: "#818cf8", // indigo-400 — luminous on dark, same family as clean accent
+  muted: "#a1a1aa", // zinc-400 - AA on dark surfaces
+  accent: "#818cf8", // indigo-400 - luminous on dark, same family as clean accent
   accentSoft: "rgba(129, 140, 248, 0.14)",
   buttonBg: "#fafafa",
   buttonText: "#09090b",
@@ -61,7 +61,7 @@ export const pandaTheme: ThemeTokens = {  name: "panda",
   buttonText: "#ffffff",
 };
 
-// Accessible difficulty colors — shared by both themes (WCAG AA on white).
+// Accessible difficulty colors - shared by both themes (WCAG AA on white).
 // Deepened text shades so badges read at 12px.
 export const difficultyStyles: Record<string, { bg: string; text: string; border: string }> = {
   Easy: { bg: "#ecfdf5", text: "#065f46", border: "#a7f3d0" },

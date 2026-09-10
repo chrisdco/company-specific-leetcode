@@ -7,7 +7,7 @@ const GUIDES = [
     name: "Blind 75",
     count: "75 problems",
     time: "~40h · 2–4 weeks",
-    blurb: "The original classic. One problem per pattern — fastest route to pattern recognition.",
+    blurb: "The original classic. One problem per pattern: the fastest route to pattern recognition.",
     bestFor: "Under 3 weeks",
     href: "https://neetcode.io/practice?tab=blind75",
   },

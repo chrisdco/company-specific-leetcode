@@ -189,7 +189,7 @@ export default function ProblemTable({
 
   // Reset pagination when a new result set arrives. Done as a render-time
   // adjustment on prop identity (the documented alternative to syncing in
-  // an effect) — no cascade, no lint exception needed.
+  // an effect) - no cascade, no lint exception needed.
   const [seenProblems, setSeenProblems] = useState(problems);
   if (seenProblems !== problems) {
     setSeenProblems(problems);
@@ -223,7 +223,7 @@ export default function ProblemTable({
           JSON.stringify(arr.length > MAX_SOLVED_STORED ? arr.slice(-MAX_SOLVED_STORED) : arr)
         );
       } catch {
-        /* storage unavailable — non-fatal */
+        /* storage unavailable - non-fatal */
       }
       return next;
     });
@@ -237,7 +237,7 @@ export default function ProblemTable({
       try {
         localStorage.setItem(SOLVED_KEY, JSON.stringify([...next]));
       } catch {
-        /* storage unavailable — non-fatal */
+        /* storage unavailable - non-fatal */
       }
       return next;
     });
@@ -255,7 +255,7 @@ export default function ProblemTable({
           JSON.stringify(arr.length > MAX_SOLVED_STORED ? arr.slice(-MAX_SOLVED_STORED) : arr)
         );
       } catch {
-        /* storage unavailable — non-fatal */
+        /* storage unavailable - non-fatal */
       }
       return next;
     });
@@ -286,7 +286,7 @@ export default function ProblemTable({
     () => problems.some((p) => (p.Companies ?? []).length > 1),
     [problems]
   );
-  /** Distinct companies across the result set — drives compare columns. */
+  /** Distinct companies across the result set - drives compare columns. */
   const compareCompanies = useMemo(() => {
     const s = new Set<string>();
     for (const p of problems) {
@@ -353,7 +353,7 @@ export default function ProblemTable({
   const paginated = filteredAndSorted.slice(startIndex, startIndex + pageSize);
 
   // Write filter state back to the URL (company/time/theme keys belong to the
-  // page effect — each writer preserves the other's keys, and replaceState
+  // page effect - each writer preserves the other's keys, and replaceState
   // never re-triggers effects, so they can't loop). Lives down here because
   // it reads safePage.
   useEffect(() => {
@@ -442,7 +442,7 @@ export default function ProblemTable({
   }
 
   /** aria-labels carry the multi-sort priority because aria-label overrides
-      inner content — an sr-only span inside would never be announced. */
+      inner content - an sr-only span inside would never be announced. */
   function sortAriaLabel(base: string, field: Exclude<SortField, "none">): string {
     const meta = sortMeta(field);
     if (sorts.length > 1 && meta.active) {
@@ -511,7 +511,7 @@ export default function ProblemTable({
     }
   }
 
-  // Loading skeleton (first fetch) — keeps layout stable, beats a bare spinner
+  // Loading skeleton (first fetch) - keeps layout stable, beats a bare spinner
   if (problems.length === 0 && loading) {
     return (
       <div className={cn("border border-stone-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5", cardRadius)} role="status" aria-label="Loading problems">
@@ -555,7 +555,7 @@ export default function ProblemTable({
 
   return (
     <div className="space-y-3">
-      {/* Results header — layer-cake scanning: H2 + counts, then mix bar */}
+      {/* Results header - layer-cake scanning: H2 + counts, then mix bar */}
       <div
         className={cn("border border-stone-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900 sm:px-5", cardRadius)}
         aria-label="Result summary"
@@ -621,7 +621,7 @@ export default function ProblemTable({
             </Button>
           </div>
         </div>
-        {/* Difficulty mix — proportional bars that double as filter toggles */}
+        {/* Difficulty mix - proportional bars that double as filter toggles */}
         <div
           className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-zinc-800"
           role="group"
@@ -639,7 +639,7 @@ export default function ProblemTable({
               type="button"
               onClick={() => toggleDifficulty(s.name)}
               aria-pressed={effectiveDifficulty === s.name}
-              title={`${s.count} ${s.name} — click to filter`}
+              title={`${s.count} ${s.name}: click to filter`}
               aria-label={`${s.count} ${s.name} problems. Activate to filter.`}
               style={{ width: `${s.pct}%`, backgroundColor: s.color }}
               className="h-full min-w-1 transition-opacity hover:opacity-80 focus-visible:opacity-80"
@@ -759,7 +759,7 @@ export default function ProblemTable({
           </Button>
         </div>
 
-        {/* Active filter pills — remove one without nuking the rest */}
+        {/* Active filter pills - remove one without nuking the rest */}
         {pills.length > 0 && (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5" aria-label="Active filters">
             {pills.map((p) => (
@@ -789,14 +789,14 @@ export default function ProblemTable({
           {fallbackUsed && (
             <span className="mt-1 flex items-start gap-1.5 text-stone-500 dark:text-zinc-400">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-500 dark:text-zinc-400" aria-hidden />
-              Topics aren&apos;t available for this result (fallback dataset) — search and the
-              topic filter cover titles only.
+              Topics aren&apos;t available for this result (fallback dataset).
+              Search and topic filters cover titles only.
             </span>
           )}
         </p>
       </div>
 
-      {/* Mobile cards — identifier first, meta inline, actions last */}
+      {/* Mobile cards - identifier first, meta inline, actions last */}
       <div className="block space-y-2.5 md:hidden">
         {paginated.map((problem) => {
           const d = getDifficultyStyle(problem.Difficulty, isDark);
@@ -906,7 +906,7 @@ export default function ProblemTable({
         })}
       </div>
 
-      {/* Desktop table — identifier first, numerics right, sticky opaque header */}
+      {/* Desktop table - identifier first, numerics right, sticky opaque header */}
       <div
         className={cn("hidden border border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 md:block", cardRadius)}
       >
@@ -1080,7 +1080,7 @@ export default function ProblemTable({
                         onClick={() => toggleSolved(problem.Link)}
                         aria-pressed={done}
                         aria-label={done ? `Mark ${problem.Title} as unsolved` : `Mark ${problem.Title} as solved`}
-                        title={done ? "Solved — click to undo" : "Mark solved"}
+                        title={done ? "Solved: click to undo" : "Mark solved"}
                         className="flex h-[26px] w-[26px] items-center justify-center rounded-full transition-all hover:scale-110"
                         style={
                           done
@@ -1103,7 +1103,7 @@ export default function ProblemTable({
         </div>
       </div>
 
-      {/* Pagination — first/last, window, jump, density */}
+      {/* Pagination - first/last, window, jump, density */}
       {filteredAndSorted.length > 0 && (
         <nav
           aria-label="Problem pages"

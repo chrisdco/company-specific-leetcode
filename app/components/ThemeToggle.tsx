@@ -10,7 +10,7 @@ const OPTIONS: { id: ThemeName; label: string; icon: typeof Sun }[] = [
   { id: "panda", label: "Panda tribute theme", icon: Panda },
 ];
 
-/** Vertical icon-only picker — identical footprint in every theme, no layout shift. */
+/** Vertical icon-only picker - identical footprint in every theme, no layout shift. */
 export default function ThemeToggle({
   theme,
   onChange,

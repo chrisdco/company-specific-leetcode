@@ -7,7 +7,7 @@ import { formatAcceptance, formatFrequency } from "./format";
  * OWASP guidance: when untrusted text lands in a spreadsheet, any cell whose
  * first character is =, +, -, @ (or starts with tab / carriage return, which
  * some parsers also treat as formula prefixes) must be neutralized. Quoting
- * alone does NOT help — Excel evaluates quoted "=cmd" too. Prefixing with a
+ * alone does NOT help - Excel evaluates quoted "=cmd" too. Prefixing with a
  * single quote forces text treatment while staying invisible-ish in Sheets
  * and explicit in Excel. Delimiters and quotes are handled separately by
  * quoting.

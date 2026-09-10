@@ -3,9 +3,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Building2, Check, ChevronDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { MAX_COMPANIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-
-export const MAX_COMPANIES = 5;
 
 export default function CompanyCombobox({
   companies,
@@ -54,7 +53,7 @@ export default function CompanyCombobox({
   }, [companies, query]);
 
   // Derive the clamped index during render instead of syncing it in an
-  // effect — resetting to 0 on every keypress felt broken, and clamping on
+  // effect - resetting to 0 on every keypress felt broken, and clamping on
   // read keeps a single source of truth without cascading renders.
   const safeHighlight =
     filtered.length === 0 ? 0 : Math.min(highlight, filtered.length - 1);
@@ -111,7 +110,7 @@ export default function CompanyCombobox({
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={open && filtered.length > 0 ? `${listId}-opt-${safeHighlight}` : undefined}
-          aria-label={`Companies — type to search ${companies.length} companies, pick up to ${MAX_COMPANIES}`}
+          aria-label={`Companies - type to search ${companies.length} companies, pick up to ${MAX_COMPANIES}`}
           placeholder={
             companies.length
               ? selected.length === 0
@@ -135,7 +134,7 @@ export default function CompanyCombobox({
               e.preventDefault();
               setHighlight((h) => Math.max(h - 1, 0));
             } else if (e.key === "Enter") {
-              // Prefer an exact match over whatever happens to be highlighted —
+              // Prefer an exact match over whatever happens to be highlighted -
               // typing a full name + Enter must not add a different prefix hit.
               const exact = query.trim()
                 ? companies.find((c) => c.toLowerCase() === query.trim().toLowerCase())
@@ -164,7 +163,7 @@ export default function CompanyCombobox({
         <div className="absolute z-50 mt-1.5 max-h-72 w-full overflow-auto rounded-xl border border-stone-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
           {atMax && (
             <p className="t-caption border-b border-stone-100 px-4 py-2 font-medium dark:border-zinc-800" style={{ backgroundColor: "var(--accentSoft)", color: "var(--accent)" }}>
-              {MAX_COMPANIES} companies selected — remove one to add another.
+              {MAX_COMPANIES} companies selected. Remove one to add another.
             </p>
           )}
           {filtered.length === 0 ? (
@@ -199,7 +198,7 @@ export default function CompanyCombobox({
           )}
           {companies.length > 120 && !query && (
             <p className="t-caption border-t border-stone-100 px-4 py-2 text-stone-500 dark:border-zinc-800 dark:text-zinc-400">
-              Showing first 100 — type to search all {companies.length}.
+              Showing first 100. Type to search all {companies.length}.
             </p>
           )}
         </div>

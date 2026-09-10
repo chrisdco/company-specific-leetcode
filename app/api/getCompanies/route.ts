@@ -1,18 +1,15 @@
-import { getMergedCompanyList, getUpstreamFreshness, RateLimitedError } from "@/lib/sources";
+import { getMergedCompanyList, RateLimitedError } from "@/lib/sources";
 
 export async function GET() {
   try {
-    const [{ companies, primaryCount, fallbackCount }, freshness] = await Promise.all([
-      getMergedCompanyList(),
-      getUpstreamFreshness(),
-    ]);
+    // Freshness dates ride a separate lazy endpoint (/api/freshness) so this
+    // critical-path call stays at two upstream requests, not four.
+    const { companies, primaryCount, fallbackCount } = await getMergedCompanyList();
     return Response.json(
       {
         companies,
         primaryCount,
         fallbackCount,
-        // Real upstream commit dates (ISO) — the UI shows these as "data as of".
-        dataAsOf: freshness,
       },
       {
         headers: {
