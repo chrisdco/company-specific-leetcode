@@ -1,4 +1,4 @@
-import { getMergedCompanyList, getUpstreamFreshness } from "@/lib/sources";
+import { getMergedCompanyList, getUpstreamFreshness, RateLimitedError } from "@/lib/sources";
 
 export async function GET() {
   try {
@@ -22,6 +22,18 @@ export async function GET() {
       }
     );
   } catch (e) {
+    if (e instanceof RateLimitedError) {
+      return Response.json(
+        { error: e.message, companies: [] },
+        {
+          status: 429,
+          headers:
+            e.retryAfterSecs !== null
+              ? { "Retry-After": String(e.retryAfterSecs) }
+              : undefined,
+        }
+      );
+    }
     const message = e instanceof Error ? e.message : "Failed to fetch companies";
     return Response.json({ error: message, companies: [] }, { status: 502 });
   }

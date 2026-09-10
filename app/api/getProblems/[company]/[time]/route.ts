@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
+import { TIME_OPTIONS } from "@/lib/constants";
 import {
-  TIME_OPTIONS,
+  RateLimitedError,
   getMergedCompanyList,
   getProblemsWithFallback,
   normalizeKey,
@@ -58,6 +59,18 @@ export async function GET(
       }
     );
   } catch (e) {
+    if (e instanceof RateLimitedError) {
+      return Response.json(
+        { error: e.message, problems: [] },
+        {
+          status: 429,
+          headers:
+            e.retryAfterSecs !== null
+              ? { "Retry-After": String(e.retryAfterSecs) }
+              : undefined,
+        }
+      );
+    }
     const message = e instanceof Error ? e.message : "Failed to fetch problems";
     const status = /not found/i.test(message) ? 404 : 502;
     return Response.json({ error: message, problems: [] }, { status });

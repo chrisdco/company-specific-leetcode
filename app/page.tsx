@@ -25,7 +25,7 @@ import {
   History,
 } from "lucide-react";
 import { cleanTheme, darkTheme, pandaTheme, type ThemeName } from "@/lib/theme";
-import { TIME_OPTIONS } from "@/lib/sources";
+import { TIME_OPTIONS } from "@/lib/constants";
 import { mergeCompanyResults, type MergedSource } from "@/lib/merge";
 import { cn } from "@/lib/utils";
 
@@ -305,10 +305,19 @@ export default function Home() {
     setCompaniesLoading(true);
     setCompaniesError("");
     try {
-      const res = await fetch("/api/getCompanies");
-      if (!res.ok) throw new Error(`Server ${res.status}`);
-      const data = await res.json();
-      const list: string[] = Array.isArray(data) ? data : data.companies ?? [];
+        const res = await fetch("/api/getCompanies");
+        // Read the body before throwing so friendly server errors
+        // (e.g. 429 rate-limit with a retry hint) reach the UI intact.
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+          companies?: string[];
+          primaryCount?: number;
+          fallbackCount?: number;
+          dataAsOf?: { primary: string | null; fallback: string | null };
+        } | string[] | null;
+        if (!res.ok) throw new Error(!Array.isArray(data) ? (data?.error || `Server ${res.status}`) : `Server ${res.status}`);
+        const payload = Array.isArray(data) ? { companies: data } : (data ?? {});
+      const list: string[] = payload.companies ?? [];
       if (list.length === 0) throw new Error("Empty company list");
       const sorted = [...list].sort((a, b) => a.localeCompare(b));
       setCompanies(sorted);
@@ -319,18 +328,24 @@ export default function Home() {
         if (fromUrl.length > 0) return fromUrl;
         return sorted.includes("Google") ? ["Google"] : sorted.slice(0, 1);
       });
-      if (!Array.isArray(data) && (data.primaryCount || data.fallbackCount)) {
-        setCompanyMeta(`${sorted.length} companies · primary ${data.primaryCount} + fallback ${data.fallbackCount}`);
+      if (payload.primaryCount || payload.fallbackCount) {
+        setCompanyMeta(`${sorted.length} companies · primary ${payload.primaryCount} + fallback ${payload.fallbackCount}`);
       } else {
         setCompanyMeta(`${sorted.length} companies`);
       }
-      if (!Array.isArray(data) && data.dataAsOf) {
-        setFreshness(data.dataAsOf);
+      if (payload.dataAsOf) {
+        setFreshness(payload.dataAsOf);
       }
     } catch (e) {
       console.error("Failed to fetch companies:", e);
+      // Server failures already carry friendly messages (e.g. the 429 retry
+      // hint); only network-level TypeErrors need a generic fallback.
       setCompaniesError(
-        "Couldn't load the company list (upstream rate limit or network). Please wait a minute and retry."
+        e instanceof TypeError
+          ? "Couldn't reach the server. Check your connection and retry."
+          : e instanceof Error
+            ? e.message
+            : "Couldn't load the company list. Please wait a minute and retry."
       );
     } finally {
       setCompaniesLoading(false);

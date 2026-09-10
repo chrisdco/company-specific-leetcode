@@ -7,16 +7,6 @@ import type { Problem } from "@/app/types/problem";
 
 export type DataSource = "primary" | "fallback";
 
-export const TIME_OPTIONS = [
-  "Thirty Days",
-  "Three Months",
-  "Six Months",
-  "More Than Six Months",
-  "All",
-] as const;
-
-export type TimeOption = (typeof TIME_OPTIONS)[number];
-
 const PRIMARY_TIME_TO_FILE: Record<string, string> = {
   "Thirty Days": "1. Thirty Days.csv",
   "Three Months": "2. Three Months.csv",
@@ -116,11 +106,81 @@ interface GitHubContent {
   type: string;
 }
 
+/** Thrown for HTTP 403/429 from api.github.com, carrying a retry hint. */
+export class RateLimitedError extends Error {
+  readonly status: number;
+  readonly retryAfterSecs: number | null;
+  constructor(message: string, opts: { status: number; retryAfterSecs?: number | null }) {
+    super(message);
+    this.name = "RateLimitedError";
+    this.status = opts.status;
+    this.retryAfterSecs = opts.retryAfterSecs ?? null;
+  }
+}
+
+/** Prefer an explicit Retry-After; else derive from x-ratelimit-reset epoch. */
+function parseRetryAfter(res: Response): number | null {
+  const ra = res.headers.get("retry-after");
+  if (ra !== null) {
+    const s = parseInt(ra, 10);
+    if (Number.isFinite(s) && s >= 0) return s;
+  }
+  const reset = res.headers.get("x-ratelimit-reset");
+  if (reset !== null) {
+    const epoch = parseInt(reset, 10);
+    if (Number.isFinite(epoch)) {
+      return Math.max(0, epoch - Math.floor(Date.now() / 1000));
+    }
+  }
+  return null;
+}
+
+function toRateLimitedError(res: Response): RateLimitedError {
+  const secs = parseRetryAfter(res);
+  const when =
+    secs !== null && secs > 0 ? ` — retry in ~${Math.ceil(secs / 60)} min` : "";
+  return new RateLimitedError(`GitHub API rate limit reached${when}.`, {
+    status: res.status,
+    retryAfterSecs: secs,
+  });
+}
+
+interface ETagEntry {
+  etag: string;
+  body: unknown;
+}
+
+// ETag store for conditional requests. Revalidated api.github.com responses
+// come back 304 and cost ZERO quota (vs 1 call per 200) — the cheapest
+// rate-limit insurance available without credentials or shared storage.
+const etagCache = new Map<string, ETagEntry>();
+
+/**
+ * JSON GET against api.github.com following current best practice:
+ * versioned Accept header, conditional requests via ETag, and explicit
+ * rate-limit errors instead of opaque 403s.
+ */
+export async function fetchGitHubJson<T>(url: string): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "company-leetcode-app",
+  };
+  const prev = etagCache.get(url);
+  if (prev) headers["If-None-Match"] = prev.etag;
+  const res = await fetchWithTimeout(url, { headers });
+  if (res.status === 304 && prev) return prev.body as T;
+  if (res.status === 403 || res.status === 429) throw toRateLimitedError(res);
+  if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+  const body = (await res.json()) as T;
+  const etag = res.headers.get("etag");
+  if (etag) etagCache.set(url, { etag, body });
+  return body;
+}
+
 async function fetchDirNames(apiUrl: string): Promise<string[]> {
   return dedup(`dirs:${apiUrl}`, async () => {
-    const res = await fetchWithTimeout(apiUrl);
-    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-    const data = (await res.json()) as GitHubContent[];
+    const data = await fetchGitHubJson<GitHubContent[]>(apiUrl);
     if (!Array.isArray(data)) return [];
     return data.filter((d) => d.type === "dir").map((d) => d.name);
   });
@@ -213,12 +273,23 @@ export async function getMergedCompanyList(): Promise<{
   );
   if (cached) return cached;
 
+  // Degrade gracefully: serve whichever source answered. But if NOTHING
+  // answered *because of rate limiting* (as opposed to network failure),
+  // propagate that signal so routes can answer 429 with a Retry-After hint
+  // instead of a misleading generic 502.
+  let rateLimited: RateLimitedError | null = null;
+  const guard = (p: Promise<string[]>) =>
+    p.catch((e: unknown) => {
+      if (e instanceof RateLimitedError && !rateLimited) rateLimited = e;
+      return [] as string[];
+    });
   const [primary, fallback] = await Promise.all([
-    fetchDirNames(PRIMARY_ROOT).catch(() => [] as string[]),
-    fetchDirNames(FALLBACK_ROOT).catch(() => [] as string[]),
+    guard(fetchDirNames(PRIMARY_ROOT)),
+    guard(fetchDirNames(FALLBACK_ROOT)),
   ]);
 
   if (primary.length === 0 && fallback.length === 0) {
+    if (rateLimited) throw rateLimited;
     throw new Error("Both upstream sources are unreachable (GitHub API rate limit or network).");
   }
 
@@ -254,9 +325,7 @@ export async function getUpstreamFreshness(): Promise<UpstreamFreshness> {
   try {
     const fetchLatest = (repo: string) =>
       dedup(`commits:${repo}`, () =>
-        fetchWithTimeout(`https://api.github.com/repos/${repo}/commits?per_page=1`)
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
+        fetchGitHubJson<unknown>(`https://api.github.com/repos/${repo}/commits?per_page=1`).catch(() => null)
       );
     const [p, f] = await Promise.all([
       fetchLatest("liquidslr/leetcode-company-wise-problems"),
