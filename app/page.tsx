@@ -477,8 +477,7 @@ export default function Home() {
       }
     } catch { /* ignore */ }
     return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companies.length]);
+  }, [companies.length, loading, fetchProblems]);
 
   const visibleProblems = useMemo(() => {
     if (!focusTop30) return problems;
